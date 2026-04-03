@@ -25,7 +25,6 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      // Validate inputs
       if (!email || !password) {
         setError("Veuillez remplir tous les champs");
         setIsLoading(false);
@@ -38,13 +37,13 @@ export default function Login() {
       });
 
       if (result.success) {
-        // Store session token in localStorage
         localStorage.setItem("sessionToken", result.sessionToken);
         localStorage.setItem("userId", result.userId.toString());
         localStorage.setItem("userName", result.name);
 
         toast.success("Connexion réussie!");
-        setLocation("/");
+        // Hard reload to ensure localStorage is read fresh on next page
+        window.location.href = "/";
       }
     } catch (err: any) {
       const errorMessage = err?.message || "Erreur lors de la connexion";
@@ -58,13 +57,11 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
-        {/* Logo/Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Les Bâtisseurs Engagés</h1>
           <p className="text-slate-400">Plateforme de Gestion d'Association</p>
         </div>
 
-        {/* Login Card */}
         <Card className="border-slate-700 bg-slate-800">
           <CardHeader>
             <CardTitle className="text-white">Connexion</CardTitle>
@@ -75,7 +72,6 @@ export default function Login() {
 
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
-              {/* Error Alert */}
               {error && (
                 <Alert className="border-red-200 bg-red-50">
                   <AlertCircle className="h-4 w-4 text-red-600" />
@@ -83,11 +79,8 @@ export default function Login() {
                 </Alert>
               )}
 
-              {/* Email Input */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-200">
-                  Email
-                </Label>
+                <Label htmlFor="email" className="text-slate-200">Email</Label>
                 <Input
                   id="email"
                   type="email"
@@ -99,11 +92,8 @@ export default function Login() {
                 />
               </div>
 
-              {/* Password Input */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-200">
-                  Mot de passe
-                </Label>
+                <Label htmlFor="password" className="text-slate-200">Mot de passe</Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -124,7 +114,6 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Submit Button */}
               <Button
                 type="submit"
                 disabled={isLoading}
@@ -140,7 +129,6 @@ export default function Login() {
                 )}
               </Button>
 
-              {/* Register Link */}
               <div className="text-center pt-4 border-t border-slate-700">
                 <p className="text-slate-400">
                   Pas encore de compte ?{" "}
@@ -157,7 +145,6 @@ export default function Login() {
           </CardContent>
         </Card>
 
-        {/* Footer */}
         <div className="mt-8 text-center text-slate-500 text-sm">
           <p>© 2024 Les Bâtisseurs Engagés. Tous droits réservés.</p>
         </div>
