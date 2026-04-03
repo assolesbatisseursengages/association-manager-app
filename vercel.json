@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "buildCommand": "pnpm build",
+  "devCommand": "pnpm dev",
+  "installCommand": "pnpm install",
+  "framework": "vite",
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET": "@jwt_secret",
+    "OAUTH_SERVER_URL": "@oauth_server_url",
+    "VITE_APP_ID": "@vite_app_id",
+    "VITE_OAUTH_PORTAL_URL": "@vite_oauth_portal_url",
+    "OWNER_NAME": "@owner_name",
+    "OWNER_OPEN_ID": "@owner_open_id",
+    "BUILT_IN_FORGE_API_URL": "@built_in_forge_api_url",
+    "BUILT_IN_FORGE_API_KEY": "@built_in_forge_api_key",
+    "VITE_FRONTEND_FORGE_API_URL": "@vite_frontend_forge_api_url",
+    "VITE_FRONTEND_FORGE_API_KEY": "@vite_frontend_forge_api_key",
+    "VITE_APP_TITLE": "@vite_app_title",
+    "VITE_APP_LOGO": "@vite_app_logo"
+  },
+  "builds": [
+    {
+      "src": "server/_core/index.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "client/src",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "server/_core/index.ts"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "dist/$1"
+    }
+  ]
+}

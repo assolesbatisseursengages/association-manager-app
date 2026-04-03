@@ -1,0 +1,1 @@
+ALTER TABLE `member_groups` ADD `responsableMemberId` int;
