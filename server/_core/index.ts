@@ -74,6 +74,15 @@ async function startServer() {
 
   registerOAuthRoutes(app);
 
+  // Health check endpoint pour Render.com
+  app.get("/api/health", (req, res) => {
+    res.status(200).json({ 
+      status: "ok", 
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV 
+    });
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({

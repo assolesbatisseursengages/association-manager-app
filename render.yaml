@@ -1,0 +1,20 @@
+# Configuration pour Render.com
+# Ce fichier sera utilisé par Render pour construire et déployer l'application
+
+# Build command
+buildCommand="pnpm install && pnpm run build"
+
+# Start command
+startCommand="pnpm run start"
+
+# Environment variables
+NODE_ENV=production
+
+# Port (Render utilise automatiquement le port $PORT)
+PORT=$PORT
+
+# Health check path
+healthCheckPath="/api/health"
+
+# Auto-deploy on push to main branch
+autoDeploy=true
