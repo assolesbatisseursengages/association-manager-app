@@ -1,6 +1,5 @@
 import { eq, and, like, desc, asc, sql, or } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import { drizzle as drizzleSqlite } from "drizzle-orm/better-sqlite3";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import Database from "better-sqlite3";
 import { 
   InsertUser, users, 
@@ -60,17 +59,10 @@ const schema = {
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      const isSQLite = process.env.DATABASE_URL.startsWith('sqlite:');
-      
-      if (isSQLite) {
-        // Extraire le chemin du fichier SQLite
-        const dbPath = process.env.DATABASE_URL.replace('sqlite:', '');
-        const sqlite = new Database(dbPath);
-        _db = drizzleSqlite(sqlite, { schema, mode: 'default' }) as any;
-      } else {
-        // MySQL
-        _db = drizzle(process.env.DATABASE_URL, { schema, mode: 'default' }) as any;
-      }
+      // Extraire le chemin du fichier SQLite
+      const dbPath = process.env.DATABASE_URL.replace('sqlite:', '');
+      const sqlite = new Database(dbPath);
+      _db = drizzle(sqlite, { schema, mode: 'default' }) as any;
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
