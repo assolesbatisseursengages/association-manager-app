@@ -10,9 +10,12 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
-    "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "db:migrate": "drizzle-kit migrate",
-    "db:generate": "drizzle-kit generate"
+    "db:push": "cross-env NODE_ENV=production drizzle-kit push",
+    "db:migrate": "cross-env NODE_ENV=production drizzle-kit migrate",
+    "db:reset": "tsx reset-db.ts",
+    "db:seed": "tsx load-seed-data.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:diagnostic": "tsx diagnostic-db.ts"
   },
   "engines": {
     "node": ">=18.0.0",
