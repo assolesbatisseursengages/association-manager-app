@@ -14,6 +14,7 @@
     "db:migrate": "cross-env NODE_ENV=production drizzle-kit migrate",
     "db:reset": "tsx reset-db.ts",
     "db:seed": "tsx load-seed-data.ts",
+    "db:test": "tsx test-connection.ts",
     "db:generate": "drizzle-kit generate",
     "db:diagnostic": "tsx diagnostic-db.ts"
   },
