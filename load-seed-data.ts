@@ -1,76 +1,52 @@
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./drizzle/schema";
-import mysql from "mysql2/promise";
+import Database from "better-sqlite3";
 
 async function seedData() {
   try {
     console.log("Chargement des données de démonstration...");
     
-    const connection = await mysql.createConnection(process.env.DATABASE_URL!);
+    const db = new Database(process.env.DATABASE_URL!.replace('sqlite:', ''));
+    const connection = drizzle(db);
     
     // Insérer les catégories
-    await connection.execute(`
-      INSERT IGNORE INTO categories (name, slug, description, color, icon, sortOrder, createdAt) VALUES
-      ('Légal', 'legal', 'Documents légaux et statuts', '#e74c3c', 'file-text', 1, NOW()),
-      ('Gouvernance', 'governance', 'Procès-verbaux et assemblées', '#3498db', 'users', 2, NOW()),
-      ('Financier', 'financial', 'Rapports financiers et budgets', '#2ecc71', 'dollar-sign', 3, NOW()),
-      ('Projets', 'projects', 'Plans et rapports de projets', '#f39c12', 'briefcase', 4, NOW())
-    `);
+    await connection.insert(schema.categories).values([
+      { name: 'Légal', slug: 'legal', description: 'Documents légaux et statuts', color: '#e74c3c', icon: 'file-text', sortOrder: 1 },
+      { name: 'Gouvernance', slug: 'governance', description: 'Procès-verbaux et assemblées', color: '#3498db', icon: 'users', sortOrder: 2 },
+      { name: 'Financier', slug: 'financial', description: 'Rapports financiers et budgets', color: '#2ecc71', icon: 'dollar-sign', sortOrder: 3 },
+      { name: 'Projets', slug: 'projects', description: 'Plans et rapports de projets', color: '#f39c12', icon: 'briefcase', sortOrder: 4 }
+    ]).onConflictDoNothing();
     console.log("✓ Catégories chargées");
 
     // Insérer les membres
-    await connection.execute(`
-      INSERT IGNORE INTO members (firstName, lastName, email, phone, role, function, status, joinedAt, createdAt, updatedAt) VALUES
-      ('Ousmane', 'Mahamat', 'ousmane@association.fr', '+235 66 00 11 22', 'Président', 'Direction', 'active', NOW(), NOW(), NOW()),
-      ('Aïcha', 'Abdoulaye', 'aicha@association.fr', '+235 62 22 33 44', 'Trésorier', 'Finances', 'active', NOW(), NOW(), NOW()),
-      ('Khalil', 'Hassan', 'khalil@association.fr', '+235 61 33 44 55', 'Secrétaire', 'Administration', 'active', NOW(), NOW(), NOW()),
-      ('Zainab', 'Ibrahim', 'zainab@association.fr', '+235 65 44 55 66', 'Membre', 'Bénévole', 'active', NOW(), NOW(), NOW())
-    `);
+    await connection.insert(schema.members).values([
+      { firstName: 'Ousmane', lastName: 'Mahamat', email: 'ousmane@association.fr', phone: '+235 66 00 11 22', role: 'Président', function: 'Direction', status: 'active' },
+      { firstName: 'Aïcha', lastName: 'Abdoulaye', email: 'aicha@association.fr', phone: '+235 62 22 33 44', role: 'Trésorier', function: 'Finances', status: 'active' },
+      { firstName: 'Khalil', lastName: 'Hassan', email: 'khalil@association.fr', phone: '+235 61 33 44 55', role: 'Secrétaire', function: 'Administration', status: 'active' },
+      { firstName: 'Zainab', lastName: 'Ibrahim', email: 'zainab@association.fr', phone: '+235 65 44 55 66', role: 'Membre', function: 'Bénévole', status: 'active' }
+    ]).onConflictDoNothing();
     console.log("✓ Membres chargés");
 
-    // Insérer les cotisations
-    await connection.execute(`
-      INSERT IGNORE INTO cotisations (memberId, montant, dateDebut, dateFin, statut, datePayment, notes, createdAt, updatedAt) VALUES
-      (1, 50000.00, '2024-01-01', '2024-12-31', 'payée', '2024-01-15', 'Cotisation annuelle 2024', NOW(), NOW()),
-      (2, 30000.00, '2024-01-01', '2024-12-31', 'payée', '2024-01-20', 'Cotisation annuelle 2024', NOW(), NOW()),
-      (3, 15000.00, '2024-01-01', '2024-12-31', 'payée', '2024-02-01', 'Cotisation annuelle 2024', NOW(), NOW()),
-      (4, 15000.00, '2024-01-01', '2024-12-31', 'en attente', NULL, 'Cotisation annuelle 2024', NOW(), NOW())
-    `);
-    console.log("✓ Cotisations chargées");
-
-    // Insérer les dons
-    await connection.execute(`
-      INSERT IGNORE INTO dons (montant, donateur, dateReception, statut, notes, createdAt, updatedAt) VALUES
-      (500000.00, 'Dubois Trading SARL', '2024-01-10', 'reçu', 'Don pour aide urgence', NOW(), NOW()),
-      (200000.00, 'Banque du Tchad', '2024-02-05', 'reçu', 'Don pour projet formation', NOW(), NOW()),
-      (100000.00, 'Particulier', '2024-03-01', 'en attente', 'Don pour projet centre', NOW(), NOW())
-    `);
-    console.log("✓ Dons chargés");
-
     // Insérer les contacts CRM
-    await connection.execute(`
-      INSERT IGNORE INTO crm_contacts (firstName, lastName, email, phone, company, position, source, status, lastContactDate, createdAt, updatedAt) VALUES
-      ('Mahamat', 'Alamine', 'mahamat@mairie.td', '+235 66 12 34 56', 'Mairie de N\'Djaména', 'Adjoint', 'official', 'active', NOW(), NOW(), NOW()),
-      ('Fatima', 'Hassan', 'fatima@minplan.td', '+235 62 45 67 89', 'Ministère du Plan', 'Responsable', 'official', 'active', NOW(), NOW(), NOW())
-    `);
+    await connection.insert(schema.crmContacts).values([
+      { firstName: 'Mahamat', lastName: 'Alamine', email: 'mahamat@mairie.td', phone: '+235 66 12 34 56', company: 'Mairie de N\'Djaména', position: 'Adjoint', source: 'official', status: 'active' },
+      { firstName: 'Fatima', lastName: 'Hassan', email: 'fatima@minplan.td', phone: '+235 62 45 67 89', company: 'Ministère du Plan', position: 'Responsable', source: 'official', status: 'active' }
+    ]).onConflictDoNothing();
     console.log("✓ Contacts CRM chargés");
 
-    // Insérer les projets
-    await connection.execute(`
-      INSERT IGNORE INTO projects (name, description, startDate, endDate, status, budget, progress, createdAt, updatedAt) VALUES
-      ('Lutte contre les inondations 2024', 'Projet d\'aide d\'urgence', '2024-02-01', '2024-12-31', 'in_progress', 1500000.00, 45, NOW(), NOW()),
-      ('Centre de Formation', 'Création d\'un centre de formation', '2024-03-01', '2025-06-30', 'planned', 2500000.00, 15, NOW(), NOW())
-    `);
-    console.log("✓ Projets chargés");
-
     // Insérer les paramètres globaux
-    await connection.execute(`
-      INSERT IGNORE INTO global_settings (associationName, seatCity, folio, email, website, phone, description, createdAt, updatedAt) VALUES
-      ('Association Manager', 'N\'Djaména', 'FOLIO-2024-001', 'contact@association.fr', 'www.association.fr', '+235 66 00 00 00', 'Plateforme de gestion', NOW(), NOW())
-    `);
+    await connection.insert(schema.globalSettings).values({
+      associationName: 'Association Manager',
+      seatCity: 'N\'Djaména',
+      folio: 'FOLIO-2024-001',
+      email: 'contact@association.fr',
+      website: 'www.association.fr',
+      phone: '+235 66 00 00 00',
+      description: 'Plateforme de gestion'
+    }).onConflictDoNothing();
     console.log("✓ Paramètres globaux chargés");
 
-    await connection.end();
+    db.close();
     console.log("\n✅ Données de démonstration chargées avec succès!");
   } catch (error) {
     console.error("❌ Erreur:", error);
