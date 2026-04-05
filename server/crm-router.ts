@@ -57,13 +57,16 @@ export const crmRouter = router({
         status: z.enum(["prospect", "active", "inactive", "archived"]).default("prospect"),
         notes: z.string().optional(),
         tags: z.string().optional(),
-        createdBy: z.number(),
+        createdBy: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        // Autoriser les gestionnaires et admins
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
-        return createCrmContact(input as any);
+        // Dériver createdBy du contexte si non fourni
+        const createdBy = input.createdBy || ctx.user?.id || 1;
+        return createCrmContact({ ...input, createdBy } as any);
       }),
 
     update: protectedProcedure
@@ -90,8 +93,8 @@ export const crmRouter = router({
         }),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
         return updateCrmContact(input.id, input.data as any);
       }),
@@ -99,8 +102,8 @@ export const crmRouter = router({
     delete: protectedProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
         await deleteCrmContact(input);
         return { success: true };
@@ -125,13 +128,14 @@ export const crmRouter = router({
         priority: z.enum(["low", "medium", "high"]).default("medium"),
         dueDate: z.date().optional(),
         assignedTo: z.number().optional(),
-        createdBy: z.number(),
+        createdBy: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
-        return createCrmActivity(input as any);
+        const createdBy = input.createdBy || ctx.user?.id || 1;
+        return createCrmActivity({ ...input, createdBy } as any);
       }),
 
     update: protectedProcedure
@@ -146,8 +150,8 @@ export const crmRouter = router({
         }),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
         return updateCrmActivity(input.id, input.data as any);
       }),
@@ -155,8 +159,8 @@ export const crmRouter = router({
     delete: protectedProcedure
       .input(z.number())
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
         await deleteCrmActivity(input);
         return { success: true };
@@ -180,8 +184,8 @@ export const crmRouter = router({
         assignedTo: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
         return createAdhesionPipeline(input as any);
       }),
@@ -194,8 +198,8 @@ export const crmRouter = router({
         rejectionReason: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
         return updateAdhesionPipeline(input.id, {
           stage: input.stage,
@@ -221,21 +225,20 @@ export const crmRouter = router({
         description: z.string().optional(),
         data: z.any().optional(),
         filters: z.any().optional(),
-        generatedBy: z.number(),
+        generatedBy: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
-        return createCrmReport(input as any);
+        const generatedBy = input.generatedBy || ctx.user?.id || 1;
+        return createCrmReport({ ...input, generatedBy } as any);
       }),
 
     getEngagementMetrics: protectedProcedure
       .query(async ({ ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
-        }
-        // Placeholder for engagement metrics calculation
+        // Permettre à tous les utilisateurs authentifiés de voir les métriques
+        // Retourner des données de base pour maintenant
         return {
           totalContacts: 0,
           activeContacts: 0,
@@ -264,10 +267,11 @@ export const crmRouter = router({
         sentBy: z.number().optional(),
       }))
       .mutation(async ({ input, ctx }: any) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Unauthorized: Admin only");
+        if (ctx.user?.role !== "admin" && ctx.user?.role !== "gestionnaire") {
+          throw new Error("Unauthorized: Admin or Manager only");
         }
-        return createCrmEmailIntegration(input as any);
+        const sentBy = input.sentBy || ctx.user?.id || 1;
+        return createCrmEmailIntegration({ ...input, sentBy } as any);
       }),
   }),
 });
