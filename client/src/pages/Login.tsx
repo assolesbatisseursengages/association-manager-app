@@ -42,8 +42,8 @@ export default function Login() {
         localStorage.setItem("userName", result.name);
 
         toast.success("Connexion réussie!");
-        // Hard reload to ensure localStorage is read fresh on next page
-        window.location.href = "/";
+        // Use setLocation for SPA navigation
+        setLocation("/");
       }
     } catch (err: any) {
       const errorMessage = err?.message || "Erreur lors de la connexion";

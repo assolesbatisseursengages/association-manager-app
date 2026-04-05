@@ -20,7 +20,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { getLoginUrl } from "@/const";
+// import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import { trpc } from "@/lib/trpc";
 import {
@@ -207,7 +207,7 @@ export default function DashboardLayout({
             </p>
           </div>
           <Button
-            onClick={() => { window.location.href = getLoginUrl(); }}
+            onClick={() => { setLocation("/login"); }}
             size="lg"
             className="w-full"
           >
