@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -68,6 +69,40 @@ const SORT_OPTIONS = [
 ];
 
 export default function CRMContacts() {
+  const { user, loading } = useAuth();
+  
+  // Vérifier les permissions admin
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+  
+  if (!user || user.role !== "admin") {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Card className="w-96">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Accès refusé
+            </CardTitle>
+            <CardDescription>
+              Vous n'avez pas les permissions nécessaires pour accéder à cette page.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              Cette fonctionnalité est réservée aux administrateurs.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSegment, setSelectedSegment] = useState<string>("");
   const [selectedStatus, setSelectedStatus] = useState<string>("");
