@@ -15,9 +15,9 @@ async function main() {
     connection = await mysql.createConnection(process.env.DATABASE_URL);
     const db = drizzle(connection);
 
-    const adminEmail = "admin@manus.im";
-    const adminPassword = "ManusPassword2026!";
-    const adminName = "Administrateur Manus";
+    const adminEmail = "admin@batisseurs-engages.fr";
+    const adminPassword = "Admin123!";
+    const adminName = "Administrateur";
 
     console.log(`🔧 Seeding admin user: ${adminEmail}`);
 
@@ -45,14 +45,14 @@ async function main() {
 
     // 3. Update Global Settings
     await db.insert(globalSettings).values({
-      associationName: "Association Manus",
-      seatCity: "Paris",
-      folio: "MANUS-2026",
+      associationName: "Les Bâtisseurs Engagés",
+      seatCity: "N'Djaména",
+      folio: "LBE-2026",
       email: adminEmail,
-      website: "https://manus.im",
+      website: "https://batisseurs-engages.fr",
     }).onDuplicateKeyUpdate({
       set: {
-        associationName: "Association Manus",
+        associationName: "Les Bâtisseurs Engagés",
         email: adminEmail,
       }
     });
@@ -63,6 +63,7 @@ async function main() {
     console.log(`📧 Email: ${adminEmail}`);
     console.log(`🔐 Password: ${adminPassword}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("Les Bâtisseurs Engagés initialized");
 
     await connection.end();
   } catch (error) {
@@ -72,4 +73,4 @@ async function main() {
   }
 }
 
-main();
+main().catch(console.error);

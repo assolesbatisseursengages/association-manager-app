@@ -816,7 +816,7 @@ export async function initializeDefaultAdmin() {
   
   try {
     // Check if admin already exists
-    const existing = await getLocalUserByEmail("admin@association.fr");
+    const existing = await getLocalUserByEmail("admin@batisseurs-engages.fr");
     if (existing) return; // Admin already exists
     
     // Import bcrypt for password hashing
@@ -824,7 +824,7 @@ export async function initializeDefaultAdmin() {
     const hashedPassword = await bcrypt.default.hash("Admin123!", 10);
     
     // Create admin user
-    const localUser = await createLocalUser("admin@association.fr", hashedPassword);
+    const localUser = await createLocalUser("admin@batisseurs-engages.fr", hashedPassword);
     
     // Set admin role
     await db
@@ -832,7 +832,7 @@ export async function initializeDefaultAdmin() {
       .set({ role: "admin" })
       .where(eq(users.id, localUser.userId));
     
-    console.log("[Database] Default admin user created: admin@association.fr");
+    console.log("[Database] Default admin user created: admin@batisseurs-engages.fr");
   } catch (error) {
     console.warn("[Database] Failed to create default admin:", error);
   }
