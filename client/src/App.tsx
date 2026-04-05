@@ -65,6 +65,7 @@ function Router() {
     <Suspense fallback={<PageLoader />}>
       <Switch>
         {/* Public routes */}
+        <Route path="/" component={Login} />
         <Route path="/login" component={Login} />
         <Route path="/register" component={Register} />
 
@@ -73,7 +74,7 @@ function Router() {
           <DashboardLayout>
             <Suspense fallback={<PageLoader />}>
               <Switch>
-                <Route path="/" component={Home} />
+                <Route path="/home" component={Home} />
                 <Route path="/documents" component={Documents} />
                 <Route path="/members" component={Members} />
                 <Route path="/member-groups" component={MemberGroups} />
@@ -110,6 +111,7 @@ function Router() {
                 <Route path="/reports" component={Reports} />
                 <Route path="/advanced-reports" component={AdvancedReports} />
                 <Route path="/dashboard" component={CustomizableDashboard} />
+                <Route path="/" component={Login} />
                 <Route component={NotFound} />
               </Switch>
             </Suspense>
