@@ -74,7 +74,7 @@ export async function getDb() {
       };
       
       const client = await mysql.createConnection(connectionConfig);
-      _db = drizzle(client, { schema }) as any;
+      _db = drizzle(client, { schema, mode: 'planetscale' }) as any;
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
