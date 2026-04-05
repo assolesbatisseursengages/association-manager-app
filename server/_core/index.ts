@@ -8,7 +8,7 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { getDb, initializeDefaultAdmin } from "../db";
-import { MIGRATION_SQL } from "../migrations";
+import { migrate } from "drizzle-orm/mysql2/migrator";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -38,28 +38,15 @@ async function runMigrations() {
     }
 
     console.log("[Migration] Running database migrations...");
-
-    const statements = MIGRATION_SQL
-      .split(";")
-      .map((s: string) => s.trim())
-      .filter((s: string) => s.length > 0 && !s.startsWith("--"));
-
-    for (const statement of statements) {
-      try {
-        await (db as any).execute(statement);
-      } catch (err: any) {
-        if (!err.message?.includes("already exists") && !err.message?.includes("Duplicate")) {
-          console.warn("[Migration] Warning:", err.message?.substring(0, 100));
-        }
-      }
-    }
-
-    console.log("[Migration] ✅ Migrations completed");
+    await migrate(db, { migrationsFolder: "./drizzle" });
+    console.log("[Migration] Migrations completed successfully!");
+    
     await initializeDefaultAdmin();
     console.log("[Migration] ✅ Admin user ready");
-
-  } catch (error) {
-    console.error("[Migration] ❌ Error:", error);
+    
+  } catch (error: any) {
+    console.error("[Migration] Error running migrations:", error);
+    // Continue anyway - the app might still work
   }
 }
 
