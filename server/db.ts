@@ -60,7 +60,20 @@ export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       const connectionString = process.env.DATABASE_URL;
-      const client = await mysql.createConnection(connectionString);
+      // Parser l'URL et ajouter SSL correctement
+      const url = new URL(connectionString);
+      const sslConfig = url.searchParams.get('ssl') === 'true' ? { rejectUnauthorized: false } : false;
+      
+      const connectionConfig = {
+        host: url.hostname,
+        port: parseInt(url.port) || 3306,
+        user: url.username,
+        password: url.password,
+        database: url.pathname.substring(1), // Enlever le premier /
+        ssl: sslConfig
+      };
+      
+      const client = await mysql.createConnection(connectionConfig);
       _db = drizzle(client, { schema }) as any;
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
