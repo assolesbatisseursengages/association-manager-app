@@ -1,6 +1,7 @@
 CREATE TABLE `activity_logs` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int,
+	`groupId` int,
 	`action` varchar(100) NOT NULL,
 	`entityType` varchar(50) NOT NULL,
 	`entityId` int,
@@ -95,9 +96,35 @@ CREATE TABLE `association_info` (
 	CONSTRAINT `association_info_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
+CREATE TABLE `association_settings` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`associationId` int NOT NULL,
+	`name` varchar(255) NOT NULL,
+	`logoUrl` text,
+	`logoFileName` varchar(255),
+	`primaryColor` varchar(7) DEFAULT '#1a4d2e',
+	`secondaryColor` varchar(7) DEFAULT '#f0f0f0',
+	`accentColor` varchar(7) DEFAULT '#d97706',
+	`contactEmail` varchar(320),
+	`contactPhone` varchar(20),
+	`website` varchar(500),
+	`address` text,
+	`city` varchar(100),
+	`country` varchar(100),
+	`description` text,
+	`theme` enum('light','dark') NOT NULL DEFAULT 'light',
+	`language` varchar(10) NOT NULL DEFAULT 'fr',
+	`timezone` varchar(50) NOT NULL DEFAULT 'Africa/Ndjamena',
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `association_settings_id` PRIMARY KEY(`id`),
+	CONSTRAINT `association_settings_associationId_unique` UNIQUE(`associationId`)
+);
+--> statement-breakpoint
 CREATE TABLE `auditLogs` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int,
+	`groupId` int,
 	`userEmail` varchar(255),
 	`action` varchar(50) NOT NULL,
 	`entityType` varchar(50) NOT NULL,
@@ -178,6 +205,7 @@ CREATE TABLE `crm_activities` (
 CREATE TABLE `crm_contacts` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int,
+	`groupId` int,
 	`firstName` varchar(100) NOT NULL,
 	`lastName` varchar(100) NOT NULL,
 	`email` varchar(320) NOT NULL,
@@ -229,6 +257,22 @@ CREATE TABLE `crm_reports` (
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	CONSTRAINT `crm_reports_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `dashboard_widgets` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`widgetType` varchar(50) NOT NULL,
+	`title` varchar(100) NOT NULL,
+	`description` text,
+	`position` int NOT NULL,
+	`size` enum('small','medium','large') NOT NULL DEFAULT 'medium',
+	`config` json,
+	`isVisible` boolean DEFAULT true,
+	`refreshInterval` int DEFAULT 300,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `dashboard_widgets_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
 CREATE TABLE `depenses` (
@@ -376,6 +420,23 @@ CREATE TABLE `global_settings` (
 	CONSTRAINT `global_settings_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
+CREATE TABLE `member_groups` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`name` varchar(100) NOT NULL,
+	`slug` varchar(100) NOT NULL,
+	`description` text,
+	`location` varchar(255),
+	`coordinatorId` int,
+	`responsableMemberId` int,
+	`email` varchar(320),
+	`phone` varchar(20),
+	`status` enum('active','inactive') NOT NULL DEFAULT 'active',
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `member_groups_id` PRIMARY KEY(`id`),
+	CONSTRAINT `member_groups_slug_unique` UNIQUE(`slug`)
+);
+--> statement-breakpoint
 CREATE TABLE `member_history` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`memberId` int NOT NULL,
@@ -402,6 +463,7 @@ CREATE TABLE `member_statuses` (
 CREATE TABLE `members` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`userId` int,
+	`groupId` int,
 	`firstName` varchar(100) NOT NULL,
 	`lastName` varchar(100) NOT NULL,
 	`email` varchar(320),
@@ -450,6 +512,21 @@ CREATE TABLE `notifications` (
 	`actionUrl` text,
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `notifications_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `offline_sync_queue` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`tableName` varchar(100) NOT NULL,
+	`action` enum('create','update','delete') NOT NULL,
+	`recordId` int,
+	`data` json,
+	`status` enum('pending','synced','failed') NOT NULL DEFAULT 'pending',
+	`errorMessage` text,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`syncedAt` timestamp,
+	`retryCount` int DEFAULT 0,
+	CONSTRAINT `offline_sync_queue_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
 CREATE TABLE `permissions` (
@@ -503,16 +580,60 @@ CREATE TABLE `user_roles` (
 	CONSTRAINT `user_roles_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
+CREATE TABLE `user_sessions` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`token` varchar(255) NOT NULL,
+	`userAgent` text,
+	`ipAddress` varchar(45),
+	`expiresAt` timestamp NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `user_sessions_id` PRIMARY KEY(`id`),
+	CONSTRAINT `user_sessions_token_unique` UNIQUE(`token`)
+);
+--> statement-breakpoint
 CREATE TABLE `users` (
 	`id` int AUTO_INCREMENT NOT NULL,
 	`openId` varchar(64) NOT NULL,
 	`name` text,
 	`email` varchar(320),
 	`loginMethod` varchar(64),
-	`role` enum('user','admin') NOT NULL DEFAULT 'user',
+	`role` enum('admin','gestionnaire','lecteur') NOT NULL DEFAULT 'lecteur',
 	`createdAt` timestamp NOT NULL DEFAULT (now()),
 	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
 	`lastSignedIn` timestamp NOT NULL DEFAULT (now()),
 	CONSTRAINT `users_id` PRIMARY KEY(`id`),
 	CONSTRAINT `users_openId_unique` UNIQUE(`openId`)
+);
+--> statement-breakpoint
+CREATE TABLE `users_local` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`userId` int NOT NULL,
+	`email` varchar(320) NOT NULL,
+	`passwordHash` varchar(255) NOT NULL,
+	`isEmailVerified` boolean DEFAULT false,
+	`emailVerificationToken` varchar(255),
+	`emailVerificationTokenExpiry` timestamp,
+	`passwordResetToken` varchar(255),
+	`passwordResetTokenExpiry` timestamp,
+	`lastLoginAt` timestamp,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `users_local_id` PRIMARY KEY(`id`),
+	CONSTRAINT `users_local_userId_unique` UNIQUE(`userId`),
+	CONSTRAINT `users_local_email_unique` UNIQUE(`email`)
+);
+--> statement-breakpoint
+CREATE TABLE `widget_templates` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`name` varchar(100) NOT NULL,
+	`type` varchar(50) NOT NULL,
+	`description` text,
+	`icon` varchar(50),
+	`defaultConfig` json,
+	`defaultSize` enum('small','medium','large') DEFAULT 'medium',
+	`category` varchar(50),
+	`isActive` boolean DEFAULT true,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `widget_templates_id` PRIMARY KEY(`id`)
 );
