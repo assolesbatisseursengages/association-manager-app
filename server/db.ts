@@ -60,21 +60,22 @@ export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       const connectionString = process.env.DATABASE_URL;
-      // Parser l'URL et ajouter SSL correctement
       const url = new URL(connectionString);
-      const sslConfig = url.searchParams.get('ssl') === 'true' ? { rejectUnauthorized: false } : false;
       
       const connectionConfig = {
         host: url.hostname,
-        port: parseInt(url.port) || 3306,
-        user: url.username,
-        password: url.password,
-        database: url.pathname.substring(1), // Enlever le premier /
-        ssl: sslConfig
+        port: parseInt(url.port) || 4000,
+        user: decodeURIComponent(url.username),
+        password: decodeURIComponent(url.password),
+        database: url.pathname.substring(1),
+        ssl: {
+          rejectUnauthorized: false,
+          minVersion: 'TLSv1.2' as const,
+        }
       };
       
       const client = await mysql.createConnection(connectionConfig);
-      _db = drizzle(client, { schema, mode: 'planetscale' }) as any;
+      _db = drizzle(client, { schema, mode: 'default' }) as any;
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -211,7 +212,6 @@ export async function getAllDocuments(filters?: {
   const db = await getDb();
   if (!db) return [];
 
-  let query = db.select().from(documents);
   const conditions = [];
 
   if (filters?.categoryId) {
@@ -299,34 +299,21 @@ export async function seedDefaultDocuments() {
   const catMap = Object.fromEntries(cats.map(c => [c.slug, c.id]));
 
   const defaultDocs: InsertDocument[] = [
-    // Juridique
     { title: "Statuts de l'association", description: "Version validée et conforme", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
     { title: "Règlement intérieur", description: "Règles de fonctionnement interne", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
     { title: "Autorisation de fonctionner", description: "Ministère de l'Intérieur", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
     { title: "PV de l'AG constitutive", description: "Procès-verbal de création", categoryId: catMap["juridique"], priority: "high", status: "pending" },
     { title: "Liste du Bureau Exécutif", description: "Noms, fonctions et contacts", categoryId: catMap["juridique"], priority: "high", status: "pending" },
-    // Gouvernance
     { title: "Feuille de route stratégique", description: "Vision 1-3 ans", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
     { title: "Plan d'actions annuel", description: "Actions de l'année", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
     { title: "Organigramme", description: "Structure organisationnelle", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
     { title: "Fiches de fonctions", description: "Rôles et responsabilités", categoryId: catMap["gouvernance"], priority: "high", status: "pending" },
-    // Opérationnel
     { title: "Note institutionnelle", description: "Présentation 2-3 pages", categoryId: catMap["operationnel"], priority: "urgent", status: "pending" },
     { title: "Portfolio des projets", description: "Projets réalisés", categoryId: catMap["operationnel"], priority: "urgent", status: "pending" },
-    { title: "Fiches projets", description: "Contexte et objectifs", categoryId: catMap["operationnel"], priority: "urgent", status: "pending" },
-    // Financier
     { title: "Budget annuel", description: "Budget de fonctionnement", categoryId: catMap["financier"], priority: "urgent", status: "pending" },
-    { title: "Plan de financement", description: "Sources de revenus", categoryId: catMap["financier"], priority: "high", status: "pending" },
-    { title: "Livre de caisse", description: "Suivi des entrées/sorties", categoryId: catMap["financier"], priority: "high", status: "pending" },
-    // RH
     { title: "Registre des membres", description: "Liste complète des membres", categoryId: catMap["rh"], priority: "high", status: "pending" },
-    { title: "Fiches d'adhésion", description: "Formulaires d'inscription", categoryId: catMap["rh"], priority: "medium", status: "pending" },
-    // Communication
     { title: "Logo officiel", description: "Identité visuelle", categoryId: catMap["communication"], priority: "high", status: "pending" },
-    { title: "Brochure de présentation", description: "Document de communication", categoryId: catMap["communication"], priority: "medium", status: "pending" },
-    // Financement
     { title: "Dossier de demande de financement", description: "Template pour bailleurs", categoryId: catMap["financement"], priority: "urgent", status: "pending" },
-    { title: "Lettre de demande de partenariat", description: "Modèle de lettre", categoryId: catMap["financement"], priority: "high", status: "pending" },
   ];
 
   await db.insert(documents).values(defaultDocs);
@@ -399,13 +386,10 @@ export async function getRecentActivity(limit: number = 20) {
   return db.select().from(activityLogs).orderBy(desc(activityLogs.createdAt)).limit(limit);
 }
 
-
 // ============ COTISATIONS ============
-
 export async function createCotisation(data: InsertCotisation) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   const result = await db.insert(cotisations).values(data);
   return result;
 }
@@ -413,74 +397,61 @@ export async function createCotisation(data: InsertCotisation) {
 export async function getCotisations() {
   const db = await getDb();
   if (!db) return [];
-  
   return await db.select().from(cotisations);
 }
 
 export async function getCotisationsByMember(memberId: number) {
   const db = await getDb();
   if (!db) return [];
-  
   return await db.select().from(cotisations).where(eq(cotisations.memberId, memberId));
 }
 
 export async function updateCotisation(id: number, data: Partial<InsertCotisation>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   return await db.update(cotisations).set(data).where(eq(cotisations.id, id));
 }
 
 // ============ DONS ============
-
 export async function createDon(data: InsertDon) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   return await db.insert(dons).values(data);
 }
 
 export async function getDons() {
   const db = await getDb();
   if (!db) return [];
-  
   return await db.select().from(dons);
 }
 
 // ============ DÉPENSES ============
-
 export async function createDepense(data: InsertDepense) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   return await db.insert(depenses).values(data);
 }
 
 export async function getDepenses() {
   const db = await getDb();
   if (!db) return [];
-  
   return await db.select().from(depenses);
 }
 
 // ============ TRANSACTIONS ============
-
 export async function createTransaction(data: InsertTransaction) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   return await db.insert(transactions).values(data);
 }
 
 export async function getTransactions() {
   const db = await getDb();
   if (!db) return [];
-  
   return await db.select().from(transactions);
 }
 
 // ============ STATISTIQUES FINANCIÈRES ============
-
 export async function getFinancialStats() {
   const db = await getDb();
   if (!db) return null;
@@ -511,7 +482,6 @@ export async function getFinancialStats() {
 }
 
 // ============ EMAIL TEMPLATES ============
-
 export async function getEmailTemplates() {
   const db = await getDb();
   if (!db) return [];
@@ -546,13 +516,10 @@ export async function deleteEmailTemplate(id: number) {
 }
 
 // ============ EMAIL HISTORY ============
-
 export async function getEmailHistory(limit: number = 50) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(emailHistory)
-    .orderBy(desc(emailHistory.createdAt))
-    .limit(limit);
+  return await db.select().from(emailHistory).orderBy(desc(emailHistory.createdAt)).limit(limit);
 }
 
 export async function getEmailHistoryById(id: number) {
@@ -577,12 +544,10 @@ export async function updateEmailHistory(id: number, data: Partial<InsertEmailHi
 }
 
 // ============ EMAIL RECIPIENTS ============
-
 export async function getEmailRecipients(emailHistoryId: number) {
   const db = await getDb();
   if (!db) return [];
-  return await db.select().from(emailRecipients)
-    .where(eq(emailRecipients.emailHistoryId, emailHistoryId));
+  return await db.select().from(emailRecipients).where(eq(emailRecipients.emailHistoryId, emailHistoryId));
 }
 
 export async function createEmailRecipient(data: InsertEmailRecipient) {
@@ -598,9 +563,7 @@ export async function updateEmailRecipient(id: number, data: Partial<InsertEmail
   await db.update(emailRecipients).set(data).where(eq(emailRecipients.id, id));
 }
 
-
 // ============ APP SETTINGS ============
-
 export async function getAppSetting(key: string): Promise<AppSetting | undefined> {
   const db = await getDb();
   if (!db) return undefined;
@@ -623,13 +586,7 @@ export async function updateAppSetting(key: string, value: string, updatedBy: nu
     await db.update(appSettings).set({ value, description, updatedBy, updatedAt: new Date() }).where(eq(appSettings.key, key));
     return getAppSetting(key);
   } else {
-    const result = await db.insert(appSettings).values({
-      key,
-      value,
-      description,
-      type: "string",
-      updatedBy,
-    });
+    const result = await db.insert(appSettings).values({ key, value, description, type: "string", updatedBy });
     return { id: result[0].insertId, key, value, description, type: "string", updatedBy, updatedAt: new Date(), createdAt: new Date() };
   }
 }
@@ -658,8 +615,7 @@ export async function getCrmContact(id: number): Promise<CrmContact | undefined>
 export async function listCrmContacts(filters?: { segment?: string; status?: string; search?: string }): Promise<CrmContact[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  let query = (db as any).query.crmContacts.findMany();
-  return query as Promise<CrmContact[]>;
+  return (db as any).query.crmContacts.findMany() as Promise<CrmContact[]>;
 }
 
 export async function updateCrmContact(id: number, data: Partial<InsertCrmContact>): Promise<CrmContact> {
@@ -740,8 +696,7 @@ export async function createCrmReport(data: InsertCrmReport): Promise<CrmReport>
 export async function listCrmReports(type?: string): Promise<CrmReport[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const reports = await (db as any).query.crmReports.findMany() as any;
-  return reports;
+  return await (db as any).query.crmReports.findMany() as any;
 }
 
 // ============ CRM EMAIL INTEGRATION FUNCTIONS ============
@@ -756,12 +711,10 @@ export async function createCrmEmailIntegration(data: InsertCrmEmailIntegration)
 export async function listCrmEmailIntegration(contactId: number): Promise<CrmEmailIntegration[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const emails = await (db as any).query.crmEmailIntegration.findMany({ where: eq(crmEmailIntegration.contactId, contactId) }) as any;
-  return emails;
+  return await (db as any).query.crmEmailIntegration.findMany({ where: eq(crmEmailIntegration.contactId, contactId) }) as any;
 }
 
-
-// Global Settings Management
+// ============ GLOBAL SETTINGS ============
 export async function getGlobalSettings() {
   const db = await getDb();
   if (!db) return undefined;
@@ -773,16 +726,12 @@ export async function updateGlobalSettings(data: Partial<InsertGlobalSettings>) 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   
-  // Check if settings exist
   const existing = await getGlobalSettings();
-  
   if (existing) {
-    // Update existing
     await db.update(globalSettings).set(data).where(eq(globalSettings.id, existing.id));
     return getGlobalSettings();
   } else {
-    // Create new
-    const result = await db.insert(globalSettings).values(data as InsertGlobalSettings);
+    await db.insert(globalSettings).values(data as InsertGlobalSettings);
     return getGlobalSettings();
   }
 }
@@ -794,7 +743,7 @@ export async function initializeGlobalSettings() {
   const existing = await getGlobalSettings();
   if (!existing) {
     await db.insert(globalSettings).values({
-      associationName: "Association Manager",
+      associationName: "Les Bâtisseurs Engagés",
       seatCity: "Siège Social",
       folio: "0001",
       email: "contact@association.fr",
@@ -807,51 +756,32 @@ export async function initializeGlobalSettings() {
   return getGlobalSettings();
 }
 
-/**
- * Initialize default admin user for local authentication
- */
+// ============ INIT ADMIN ============
 export async function initializeDefaultAdmin() {
   const db = await getDb();
   if (!db) return;
   
   try {
-    // Check if admin already exists
-    const existing = await getLocalUserByEmail("admin@batisseurs-engages.fr");
-    if (existing) return; // Admin already exists
+    const existing = await getLocalUserByEmail("admin@association.fr");
+    if (existing) return;
     
-    // Import bcrypt for password hashing
     const bcrypt = await import("bcryptjs");
     const hashedPassword = await bcrypt.default.hash("Admin123!", 10);
+    const localUser = await createLocalUser("admin@association.fr", hashedPassword);
     
-    // Create admin user
-    const localUser = await createLocalUser("admin@batisseurs-engages.fr", hashedPassword);
-    
-    // Set admin role
-    await db
-      .update(users)
-      .set({ role: "admin" })
-      .where(eq(users.id, localUser.userId));
-    
-    console.log("[Database] Default admin user created: admin@batisseurs-engages.fr");
+    await db.update(users).set({ role: "admin" }).where(eq(users.id, localUser.userId));
+    console.log("[Database] Default admin user created: admin@association.fr");
   } catch (error) {
     console.warn("[Database] Failed to create default admin:", error);
   }
 }
 
-
 // ============ LOCAL AUTH FUNCTIONS ============
-
-/**
- * Create a local user account
- */
 export async function createLocalUser(email: string, passwordHash: string, userId?: number): Promise<UserLocal> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
-    // If no userId provided, create a new user first
     let actualUserId = userId;
     if (!actualUserId) {
       const result = await db.insert(users).values({
@@ -890,14 +820,9 @@ export async function createLocalUser(email: string, passwordHash: string, userI
   }
 }
 
-/**
- * Get local user by email
- */
 export async function getLocalUserByEmail(email: string): Promise<UserLocal | null> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
     const result = await db.select().from(usersLocal).where(eq(usersLocal.email, email)).limit(1);
@@ -908,14 +833,9 @@ export async function getLocalUserByEmail(email: string): Promise<UserLocal | nu
   }
 }
 
-/**
- * Get local user by userId
- */
 export async function getLocalUserByUserId(userId: number): Promise<UserLocal | null> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
     const result = await db.select().from(usersLocal).where(eq(usersLocal.userId, userId)).limit(1);
@@ -926,14 +846,9 @@ export async function getLocalUserByUserId(userId: number): Promise<UserLocal | 
   }
 }
 
-/**
- * Update local user password
- */
 export async function updateLocalUserPassword(userId: number, newPasswordHash: string): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
     await db.update(usersLocal).set({
@@ -947,36 +862,24 @@ export async function updateLocalUserPassword(userId: number, newPasswordHash: s
   }
 }
 
-/**
- * Update last login time
- */
 export async function updateLastLoginTime(userId: number): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
-    await db.update(usersLocal).set({
-      lastLoginAt: new Date(),
-    }).where(eq(usersLocal.userId, userId));
+    await db.update(usersLocal).set({ lastLoginAt: new Date() }).where(eq(usersLocal.userId, userId));
   } catch (error) {
     console.error("[Database] Error updating last login:", error);
     throw error;
   }
 }
 
-/**
- * Create a user session
- */
 export async function createUserSession(userId: number, token: string, userAgent?: string, ipAddress?: string): Promise<UserSession> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const result = await db.insert(userSessions).values({
       userId,
       token,
@@ -1000,14 +903,9 @@ export async function createUserSession(userId: number, token: string, userAgent
   }
 }
 
-/**
- * Get user session by token
- */
 export async function getUserSessionByToken(token: string): Promise<UserSession | null> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
     const result = await db.select().from(userSessions).where(
@@ -1023,14 +921,9 @@ export async function getUserSessionByToken(token: string): Promise<UserSession 
   }
 }
 
-/**
- * Delete user session
- */
 export async function deleteUserSession(token: string): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
     await db.delete(userSessions).where(eq(userSessions.token, token));
@@ -1040,14 +933,9 @@ export async function deleteUserSession(token: string): Promise<void> {
   }
 }
 
-/**
- * Clean up expired sessions
- */
 export async function cleanupExpiredSessions(): Promise<void> {
   const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
+  if (!db) throw new Error("Database not available");
 
   try {
     await db.delete(userSessions).where(sql`${userSessions.expiresAt} < NOW()`);
