@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { getDb, initializeDefaultAdmin } from "../db";
 import { migrate } from "drizzle-orm/mysql2/migrator";
+import { addCacheHeaders } from "./cache-headers";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -61,6 +62,9 @@ async function startServer() {
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+  // Ajouter les headers de cache pour améliorer la performance
+  addCacheHeaders(app);
 
   await runMigrations();
 
