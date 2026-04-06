@@ -121,7 +121,7 @@ export const localAuthRouter = router({
         }
 
         // Verify password
-        const isPasswordValid = await verifyPassword(input.password, localUser.passwordHash);
+        const isPasswordValid = await verifyPassword(input.password, localUser.hashedPassword || localUser.passwordHash);
         if (!isPasswordValid) {
           throw new TRPCError({
             code: "UNAUTHORIZED",
