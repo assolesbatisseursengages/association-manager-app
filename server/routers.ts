@@ -21,6 +21,7 @@ import { localAuthRouter } from "./routers/local-auth";
 import { reportsRouter } from "./routers/reports";
 import { widgetsRouter } from "./routers/widgets";
 import { memberGroupsRouter } from "./routers/member-groups";
+import { mediaRouter } from "./routers/media";
 
 import { z } from "zod";
 import { 
@@ -66,6 +67,7 @@ export const appRouter = router({
   reports: reportsRouter,
   widgets: widgetsRouter,
   memberGroups: memberGroupsRouter,
+  media: mediaRouter,
 
   // ============ CATEGORIES ============
   categories: router({
