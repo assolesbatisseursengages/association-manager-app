@@ -37,9 +37,14 @@ async function runMigrations() {
       return;
     }
 
-    console.log("[Migration] Running database migrations...");
-    await migrate(db, { migrationsFolder: "./drizzle" });
-    console.log("[Migration] Migrations completed successfully!");
+    // Skip Drizzle migrations on production to avoid table exists errors
+    if (process.env.NODE_ENV === "production") {
+      console.log("[Migration] Skipping Drizzle migrations on production (tables already created manually)");
+    } else {
+      console.log("[Migration] Running database migrations...");
+      await migrate(db, { migrationsFolder: "./drizzle" });
+      console.log("[Migration] Migrations completed successfully!");
+    }
     
     await initializeDefaultAdmin();
     console.log("[Migration] ✅ Admin user ready");
