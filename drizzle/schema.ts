@@ -851,3 +851,144 @@ export const memberGroups = mysqlTable("member_groups", {
 
 export type MemberGroup = typeof memberGroups.$inferSelect;
 export type InsertMemberGroup = typeof memberGroups.$inferInsert;
+
+/**
+ * Projects table
+ */
+export const projects = mysqlTable("projects", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  startDate: timestamp("startDate"),
+  endDate: timestamp("endDate"),
+  budget: decimal("budget", { precision: 12, scale: 2 }),
+  status: mysqlEnum("status", ["planning", "active", "on-hold", "completed", "cancelled"]).default("planning"),
+  progress: int("progress").default(0),
+  priority: mysqlEnum("priority", ["low", "medium", "high", "critical"]).default("medium"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+
+export type Project = typeof projects.$inferSelect;
+export type InsertProject = typeof projects.$inferInsert;
+
+/**
+ * Project Members table
+ */
+export const projectMembers = mysqlTable("project_members", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  userId: int("userId").notNull(),
+  role: varchar("role", { length: 100 }).default("member"),
+  joinedAt: timestamp("joinedAt").defaultNow(),
+});
+
+export type ProjectMember = typeof projectMembers.$inferSelect;
+export type InsertProjectMember = typeof projectMembers.$inferInsert;
+
+/**
+ * Project Expenses table
+ */
+export const projectExpenses = mysqlTable("project_expenses", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  description: varchar("description", { length: 255 }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  category: varchar("category", { length: 100 }),
+  date: timestamp("date").defaultNow(),
+  createdBy: int("createdBy"),
+});
+
+export type ProjectExpense = typeof projectExpenses.$inferSelect;
+export type InsertProjectExpense = typeof projectExpenses.$inferInsert;
+
+/**
+ * Project History table
+ */
+export const projectHistory = mysqlTable("project_history", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  action: varchar("action", { length: 100 }).notNull(),
+  changedBy: int("changedBy"),
+  changedAt: timestamp("changedAt").defaultNow(),
+  details: text("details"),
+});
+
+export type ProjectHistory = typeof projectHistory.$inferSelect;
+export type InsertProjectHistory = typeof projectHistory.$inferInsert;
+
+/**
+ * Tasks table
+ */
+export const tasks = mysqlTable("tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  projectId: int("projectId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  status: mysqlEnum("status", ["todo", "in-progress", "done", "cancelled"]).default("todo"),
+  priority: mysqlEnum("priority", ["low", "medium", "high", "critical"]).default("medium"),
+  dueDate: timestamp("dueDate"),
+  assignedTo: int("assignedTo"),
+  progress: int("progress").default(0),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;
+
+/**
+ * Budgets table
+ */
+export const budgets = mysqlTable("budgets", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  year: int("year").notNull(),
+  totalAmount: decimal("totalAmount", { precision: 15, scale: 2 }).notNull(),
+  categoryId: int("categoryId"),
+  createdBy: int("createdBy"),
+  status: mysqlEnum("status", ["draft", "approved", "active", "closed"]).default("draft"),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+
+export type Budget = typeof budgets.$inferSelect;
+export type InsertBudget = typeof budgets.$inferInsert;
+
+/**
+ * Budget Lines table
+ */
+export const budgetLines = mysqlTable("budget_lines", {
+  id: int("id").autoincrement().primaryKey(),
+  budgetId: int("budgetId").notNull(),
+  lineNumber: int("lineNumber").notNull(),
+  description: varchar("description", { length: 255 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  category: varchar("category", { length: 100 }),
+});
+
+export type BudgetLine = typeof budgetLines.$inferSelect;
+export type InsertBudgetLine = typeof budgetLines.$inferInsert;
+
+/**
+ * Invoices table
+ */
+export const invoices = mysqlTable("invoices", {
+  id: int("id").autoincrement().primaryKey(),
+  invoiceNumber: varchar("invoiceNumber", { length: 100 }).notNull().unique(),
+  invoiceDate: timestamp("invoiceDate").notNull(),
+  dueDate: timestamp("dueDate").notNull(),
+  totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }).notNull(),
+  paidAmount: decimal("paidAmount", { precision: 12, scale: 2 }).default(0),
+  status: mysqlEnum("status", ["draft", "sent", "paid", "overdue", "cancelled"]).default("draft"),
+  description: text("description"),
+  supplierId: int("supplierId"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+
+export type Invoice = typeof invoices.$inferSelect;
+export type InsertInvoice = typeof invoices.$inferInsert;
