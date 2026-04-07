@@ -111,30 +111,48 @@ export const localAuthRouter = router({
     )
     .mutation(async ({ input }) => {
       try {
+        console.log(`[LocalAuth] Login attempt for email: ${input.email}`);
+        
         // Get user by email
         const localUser = await getLocalUserByEmail(input.email);
         if (!localUser) {
+          console.warn(`[LocalAuth] User not found for email: ${input.email}`);
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Email ou mot de passe incorrect",
           });
         }
+        console.log(`[LocalAuth] User found: ${localUser.userId}`);
 
         // Verify password
-        const isPasswordValid = await verifyPassword(input.password, localUser.hashedPassword || localUser.passwordHash);
-        if (!isPasswordValid) {
+        console.log(`[LocalAuth] Verifying password for user ${localUser.userId}`);
+        const passwordField = localUser.hashedPassword || localUser.passwordHash;
+        if (!passwordField) {
+          console.error(`[LocalAuth] No password hash found for user ${localUser.userId}`);
           throw new TRPCError({
             code: "UNAUTHORIZED",
             message: "Email ou mot de passe incorrect",
           });
         }
+        
+        const isPasswordValid = await verifyPassword(input.password, passwordField);
+        if (!isPasswordValid) {
+          console.warn(`[LocalAuth] Password verification failed for user ${localUser.userId}`);
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Email ou mot de passe incorrect",
+          });
+        }
+        console.log(`[LocalAuth] Password verified for user ${localUser.userId}`);
 
         // Update last login time
         await updateLastLoginTime(localUser.userId);
+        console.log(`[LocalAuth] Last login time updated for user ${localUser.userId}`);
 
         // Create session token
         const sessionToken = generateToken();
         await createUserSession(localUser.userId, sessionToken);
+        console.log(`[LocalAuth] Session created for user ${localUser.userId}`);
 
         // Get user info
         const db = await getDb();
@@ -150,6 +168,7 @@ export const localAuthRouter = router({
           }
         }
 
+        console.log(`[LocalAuth] Login successful for user ${localUser.userId}`);
         return {
           success: true,
           userId: localUser.userId,
@@ -162,6 +181,7 @@ export const localAuthRouter = router({
           throw error;
         }
         console.error("[LocalAuth] Login error:", error);
+        console.error("[LocalAuth] Error stack:", (error as any).stack);
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
           message: "Erreur lors de la connexion",
