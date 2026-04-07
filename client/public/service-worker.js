@@ -52,11 +52,11 @@ self.addEventListener('fetch', (event) => {
   if (request.url.includes('/api/')) {
     event.respondWith(
       fetch(request)
-        .then((response) => {
+        .then(async (response) => {
           // Cache successful API responses
           if (response.ok) {
-            const cache = caches.open(CACHE_NAME);
-            cache.then((c) => c.put(request, response.clone()));
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put(request, response.clone());
           }
           return response;
         })
