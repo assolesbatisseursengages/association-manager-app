@@ -43,7 +43,7 @@ export default function Login() {
 
         toast.success("Connexion réussie!");
         // Use setLocation for SPA navigation
-        setLocation("/");
+        setLocation("/home");
       }
     } catch (err: any) {
       const errorMessage = err?.message || "Erreur lors de la connexion";
