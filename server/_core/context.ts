@@ -1,6 +1,13 @@
+/**
+ * CONTEXT tRPC UNIFIÉ
+ *
+ * Authentification : cookie HttpOnly session_token uniquement.
+ * Plus de fallback OAuth ni de localStorage.
+ * Le cookie est posé par auth.login / auth.register (HttpOnly, SameSite=Lax).
+ */
+
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
-import { sdk } from "./sdk";
 import { getUserSessionByToken, getDb } from "../db";
 import { users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
@@ -16,50 +23,28 @@ export async function createContext(
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
-  // 1. Essai OAuth Manus (cookie de session)
   try {
-    user = await sdk.authenticateRequest(opts.req);
-  } catch {
-    user = null;
-  }
+    const cookieHeader = opts.req.headers.cookie ?? "";
+    const match = cookieHeader.match(/session_token=([^;]+)/);
+    const token = match?.[1];
 
-  // 2. Fallback : session locale via header Authorization ou cookie session_token
-  if (!user) {
-    try {
-      // Chercher le token dans le header Authorization: Bearer <token>
-      // ou dans le cookie session_token (posé par le frontend au login)
-      let sessionToken: string | undefined;
-
-      const authHeader = opts.req.headers["authorization"];
-      if (authHeader?.startsWith("Bearer ")) {
-        sessionToken = authHeader.slice(7);
-      }
-
-      if (!sessionToken) {
-        // Cookie posé par le frontend : document.cookie = "session_token=xxx"
-        const cookieHeader = opts.req.headers.cookie ?? "";
-        const match = cookieHeader.match(/session_token=([^;]+)/);
-        if (match) sessionToken = match[1];
-      }
-
-      if (sessionToken) {
-        const session = await getUserSessionByToken(sessionToken);
-        if (session) {
-          const db = await getDb();
-          if (db) {
-            const result = await db
-              .select()
-              .from(users)
-              .where(eq(users.id, session.userId))
-              .limit(1);
-            user = result[0] ?? null;
-          }
+    if (token) {
+      const session = await getUserSessionByToken(token);
+      if (session) {
+        const db = await getDb();
+        if (db) {
+          const result = await db
+            .select()
+            .from(users)
+            .where(eq(users.id, session.userId))
+            .limit(1);
+          user = result[0] ?? null;
         }
       }
-    } catch (error) {
-      console.error("[Auth] Local session fallback error:", error);
-      user = null;
     }
+  } catch (error) {
+    console.error("[Auth] Context error:", error);
+    user = null;
   }
 
   return {

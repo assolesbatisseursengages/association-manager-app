@@ -1,205 +1,203 @@
+/**
+ * AUTH ROUTER UNIFIÉ
+ *
+ * Source de vérité unique : users + users_local + user_sessions
+ * Supprime la dépendance à app_users et aux JWT cookie.
+ *
+ * Flux :
+ *   login / register → users_local (bcrypt) → user_sessions (token opaque) → cookie session_token
+ *   auth.me          → context.ts lit cookie session_token → getUserSessionByToken → users
+ *   logout           → deleteUserSession + clear cookie
+ */
+
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
-import { COOKIE_NAME } from "@shared/const";
 import { loginSchema, registerSchema, changePasswordSchema } from "@shared/auth-schemas";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { getSessionCookieOptions } from "./_core/cookies";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
-  findUserByEmail,
-  findUserById,
-  createAppUser,
-  verifyPassword,
-  updateLastLogin,
-  changePassword as changeUserPassword,
-} from "./auth-db";
-import jwt from "jsonwebtoken";
+  getLocalUserByEmail,
+  createLocalUser,
+  updateLastLoginTime,
+  updateLocalUserPassword,
+  getLocalUserByUserId,
+  createUserSession,
+  deleteUserSession,
+  getDb,
+} from "./db";
+import { hashPassword, verifyPassword, generateToken, validatePassword } from "./auth-local";
+import { users } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key";
-const SESSION_DURATION = 7 * 24 * 60 * 60 * 1000; // 7 days
+// Durée cookie : 7 jours en ms
+const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 
-/**
- * Créer un token JWT
- */
-function createToken(userId: number, email: string) {
-  return jwt.sign({ userId, email }, JWT_SECRET, {
-    expiresIn: "7d",
+function setSessionCookie(res: any, token: string) {
+  const maxAge = SESSION_MS / 1000; // secondes
+  const secure = process.env.NODE_ENV === "production";
+  res.cookie("session_token", token, {
+    httpOnly: true,       // inaccessible au JS (protection XSS)
+    sameSite: "lax",
+    secure,
+    maxAge: maxAge * 1000, // Express attend des ms
+    path: "/",
   });
 }
 
-/**
- * Vérifier un token JWT
- */
-function verifyToken(token: string) {
-  try {
-    return jwt.verify(token, JWT_SECRET) as { userId: number; email: string };
-  } catch (error) {
-    return null;
-  }
+function clearSessionCookie(res: any) {
+  res.clearCookie("session_token", { path: "/" });
 }
 
 export const authRouter = router({
   /**
-   * Obtenir l'utilisateur actuellement connecté
+   * Utilisateur connecté — lu depuis ctx (context.ts)
+   * Retourne null si non authentifié (pas d'erreur → le frontend gère le redirect)
    */
-  me: publicProcedure.query(opts => opts.ctx.user),
+  me: publicProcedure.query((opts) => opts.ctx.user ?? null),
 
   /**
-   * Login avec email et mot de passe
+   * Connexion email + mot de passe
    */
   login: publicProcedure
     .input(loginSchema)
     .mutation(async ({ input, ctx }) => {
-      try {
-        // Trouver l'utilisateur par email
-        const user = await findUserByEmail(input.email);
-        if (!user) {
-          throw new TRPCError({
-            code: "UNAUTHORIZED",
-            message: "Email ou mot de passe incorrect",
-          });
-        }
-
-        // Vérifier que l'utilisateur est actif
-        if (!user.isActive) {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Cet utilisateur a été désactivé",
-          });
-        }
-
-        // Vérifier le mot de passe
-        const isPasswordValid = await verifyPassword(input.password, user.password);
-        if (!isPasswordValid) {
-          throw new TRPCError({
-            code: "UNAUTHORIZED",
-            message: "Email ou mot de passe incorrect",
-          });
-        }
-
-        // Mettre à jour le dernier login
-        await updateLastLogin(user.id);
-
-        // Créer un token JWT
-        const token = createToken(user.id, user.email!);
-
-        // Définir le cookie de session
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, token, {
-          ...cookieOptions,
-          maxAge: SESSION_DURATION,
-        });
-
-        return {
-          success: true,
-          user: {
-            id: user.id,
-            email: user.email,
-            fullName: user.fullName,
-            role: user.role,
-          },
-        };
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
+      // 1. Chercher dans users_local
+      const localUser = await getLocalUserByEmail(input.email);
+      if (!localUser) {
         throw new TRPCError({
-          code: "INTERNAL_SERVER_ERROR",
-          message: "Erreur lors de la connexion",
+          code: "UNAUTHORIZED",
+          message: "Email ou mot de passe incorrect",
         });
       }
+
+      // 2. Vérifier le mot de passe bcrypt
+      const valid = await verifyPassword(input.password, localUser.passwordHash);
+      if (!valid) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Email ou mot de passe incorrect",
+        });
+      }
+
+      // 3. Charger le profil complet depuis users
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "DB indisponible" });
+
+      const userRecord = await db.select().from(users).where(eq(users.id, localUser.userId)).limit(1);
+      const user = userRecord[0];
+      if (!user) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Profil utilisateur introuvable" });
+      }
+
+      // 4. Créer une session
+      await updateLastLoginTime(localUser.userId);
+      const token = generateToken();
+      await createUserSession(
+        localUser.userId,
+        token,
+        ctx.req.headers["user-agent"],
+        ctx.req.ip,
+      );
+
+      // 5. Poser le cookie HttpOnly (+ header pour le client)
+      setSessionCookie(ctx.res, token);
+
+      return {
+        success: true,
+        sessionToken: token, // gardé pour la compatibilité Login.tsx → cookie
+        userId: user.id,
+        email: user.email,
+        name: user.name ?? user.email,
+        role: user.role,
+      };
     }),
 
   /**
-   * Register avec email, mot de passe et nom complet
+   * Inscription — crée users + users_local
    */
   register: publicProcedure
     .input(registerSchema)
     .mutation(async ({ input, ctx }) => {
-      try {
-        // Créer l'utilisateur
-        const user = await createAppUser({
-          email: input.email,
-          password: input.password,
-          fullName: input.fullName,
-          role: "membre",
-        });
-
-        if (!user) {
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Erreur lors de la création du compte",
-          });
-        }
-
-        // Créer un token JWT
-        const token = createToken(user.id, user.email!);
-
-        // Définir le cookie de session
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        ctx.res.cookie(COOKIE_NAME, token, {
-          ...cookieOptions,
-          maxAge: SESSION_DURATION,
-        });
-
-        return {
-          success: true,
-          user: {
-            id: user.id,
-            email: user.email,
-            fullName: user.fullName,
-            role: user.role,
-          },
-        };
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        const message = error instanceof Error ? error.message : "Erreur lors de l'inscription";
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message,
-        });
+      // 1. Vérifier doublon
+      const existing = await getLocalUserByEmail(input.email);
+      if (existing) {
+        throw new TRPCError({ code: "CONFLICT", message: "Un compte existe déjà avec cet email" });
       }
+
+      // 2. Valider la force du mot de passe
+      const pwCheck = validatePassword(input.password);
+      if (!pwCheck.isValid) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: pwCheck.errors.join(", ") });
+      }
+
+      // 3. Hash + création
+      const passwordHash = await hashPassword(input.password);
+      const localUser = await createLocalUser(input.email, passwordHash);
+
+      // 4. Mettre à jour le nom dans users
+      const db = await getDb();
+      if (db) {
+        await db.update(users).set({ name: input.fullName }).where(eq(users.id, localUser.userId));
+      }
+
+      // 5. Session
+      const token = generateToken();
+      await createUserSession(localUser.userId, token, ctx.req.headers["user-agent"], ctx.req.ip);
+      setSessionCookie(ctx.res, token);
+
+      return {
+        success: true,
+        sessionToken: token,
+        userId: localUser.userId,
+        email: localUser.email,
+        name: input.fullName,
+      };
     }),
 
   /**
-   * Changer le mot de passe
+   * Déconnexion
+   */
+  logout: publicProcedure.mutation(async ({ ctx }) => {
+    // Lire le token depuis le cookie
+    const cookieHeader = ctx.req.headers.cookie ?? "";
+    const match = cookieHeader.match(/session_token=([^;]+)/);
+    const token = match?.[1];
+
+    if (token) {
+      try {
+        await deleteUserSession(token);
+      } catch {
+        // Session déjà expirée — pas grave
+      }
+    }
+
+    clearSessionCookie(ctx.res);
+    return { success: true };
+  }),
+
+  /**
+   * Changement de mot de passe (utilisateur connecté)
    */
   changePassword: protectedProcedure
     .input(changePasswordSchema)
     .mutation(async ({ input, ctx }) => {
-      try {
-        if (!ctx.user) {
-          throw new TRPCError({
-            code: "UNAUTHORIZED",
-            message: "Vous devez être connecté",
-          });
-        }
-
-        await changeUserPassword(ctx.user.id, input.oldPassword, input.newPassword);
-
-        return {
-          success: true,
-          message: "Mot de passe changé avec succès",
-        };
-      } catch (error) {
-        if (error instanceof TRPCError) {
-          throw error;
-        }
-        const message = error instanceof Error ? error.message : "Erreur lors du changement de mot de passe";
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message,
-        });
+      const localUser = await getLocalUserByUserId(ctx.user.id);
+      if (!localUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Compte local introuvable" });
       }
-    }),
 
-  /**
-   * Logout
-   */
-  logout: publicProcedure.mutation(({ ctx }) => {
-    const cookieOptions = getSessionCookieOptions(ctx.req);
-    ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-    return { success: true };
-  }),
+      const valid = await verifyPassword(input.oldPassword, localUser.passwordHash);
+      if (!valid) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Ancien mot de passe incorrect" });
+      }
+
+      const pwCheck = validatePassword(input.newPassword);
+      if (!pwCheck.isValid) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: pwCheck.errors.join(", ") });
+      }
+
+      const newHash = await hashPassword(input.newPassword);
+      await updateLocalUserPassword(ctx.user.id, newHash);
+
+      return { success: true, message: "Mot de passe modifié avec succès" };
+    }),
 });
