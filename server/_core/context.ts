@@ -1,6 +1,7 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
-import * as db from "../db";
+import { sdk } from "./sdk";
+import { getUserSessionByToken, getDb } from "../db";
 import { users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 
@@ -15,27 +16,50 @@ export async function createContext(
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
+  // 1. Essai OAuth Manus (cookie de session)
   try {
-    // Try local session token from header first
-    const headerToken = opts.req.headers["x-session-token"];
-    const token = Array.isArray(headerToken) ? headerToken[0] : headerToken;
-
-    if (token) {
-      const session = await db.getUserSessionByToken(token);
-      if (session) {
-        const database = await db.getDb();
-        if (database) {
-          const rows = await database
-            .select()
-            .from(users)
-            .where(eq(users.id, session.userId))
-            .limit(1);
-          user = rows[0] ?? null;
-        }
-      }
-    }
+    user = await sdk.authenticateRequest(opts.req);
   } catch {
     user = null;
+  }
+
+  // 2. Fallback : session locale via header Authorization ou cookie session_token
+  if (!user) {
+    try {
+      // Chercher le token dans le header Authorization: Bearer <token>
+      // ou dans le cookie session_token (posé par le frontend au login)
+      let sessionToken: string | undefined;
+
+      const authHeader = opts.req.headers["authorization"];
+      if (authHeader?.startsWith("Bearer ")) {
+        sessionToken = authHeader.slice(7);
+      }
+
+      if (!sessionToken) {
+        // Cookie posé par le frontend : document.cookie = "session_token=xxx"
+        const cookieHeader = opts.req.headers.cookie ?? "";
+        const match = cookieHeader.match(/session_token=([^;]+)/);
+        if (match) sessionToken = match[1];
+      }
+
+      if (sessionToken) {
+        const session = await getUserSessionByToken(sessionToken);
+        if (session) {
+          const db = await getDb();
+          if (db) {
+            const result = await db
+              .select()
+              .from(users)
+              .where(eq(users.id, session.userId))
+              .limit(1);
+            user = result[0] ?? null;
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[Auth] Local session fallback error:", error);
+      user = null;
+    }
   }
 
   return {

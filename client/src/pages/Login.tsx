@@ -18,6 +18,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
 
   const loginMutation = trpc.localAuth.login.useMutation();
+  const utils = trpc.useUtils();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -31,19 +32,24 @@ export default function Login() {
         return;
       }
 
-      const result = await loginMutation.mutateAsync({
-        email,
-        password,
-      });
+      const result = await loginMutation.mutateAsync({ email, password });
 
       if (result.success) {
+        // Stocker dans localStorage (fallback)
         localStorage.setItem("sessionToken", result.sessionToken);
         localStorage.setItem("userId", result.userId.toString());
         localStorage.setItem("userName", result.name);
 
-        toast.success("Connexion réussie!");
-        // Use setLocation for SPA navigation
-        setLocation("/home");
+        // Poser un cookie session_token pour que context.ts le lise côté serveur
+        // SameSite=Lax suffit pour les requêtes same-origin
+        const maxAge = 7 * 24 * 60 * 60; // 7 jours en secondes
+        document.cookie = `session_token=${result.sessionToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+
+        // Invalider auth.me pour forcer un rechargement avec le nouveau cookie
+        await utils.auth.me.invalidate();
+
+        toast.success("Connexion réussie !");
+        setLocation("/");
       }
     } catch (err: any) {
       const errorMessage = err?.message || "Erreur lors de la connexion";
@@ -57,11 +63,13 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        {/* Logo/Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-white mb-2">Les Bâtisseurs Engagés</h1>
           <p className="text-slate-400">Plateforme de Gestion d'Association</p>
         </div>
 
+        {/* Login Card */}
         <Card className="border-slate-700 bg-slate-800">
           <CardHeader>
             <CardTitle className="text-white">Connexion</CardTitle>
@@ -72,6 +80,7 @@ export default function Login() {
 
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
+              {/* Error Alert */}
               {error && (
                 <Alert className="border-red-200 bg-red-50">
                   <AlertCircle className="h-4 w-4 text-red-600" />
@@ -79,8 +88,11 @@ export default function Login() {
                 </Alert>
               )}
 
+              {/* Email Input */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-200">Email</Label>
+                <Label htmlFor="email" className="text-slate-200">
+                  Email
+                </Label>
                 <Input
                   id="email"
                   type="email"
@@ -92,8 +104,11 @@ export default function Login() {
                 />
               </div>
 
+              {/* Password Input */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-200">Mot de passe</Label>
+                <Label htmlFor="password" className="text-slate-200">
+                  Mot de passe
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -114,6 +129,7 @@ export default function Login() {
                 </div>
               </div>
 
+              {/* Submit Button */}
               <Button
                 type="submit"
                 disabled={isLoading}
@@ -129,6 +145,7 @@ export default function Login() {
                 )}
               </Button>
 
+              {/* Register Link */}
               <div className="text-center pt-4 border-t border-slate-700">
                 <p className="text-slate-400">
                   Pas encore de compte ?{" "}
@@ -145,6 +162,7 @@ export default function Login() {
           </CardContent>
         </Card>
 
+        {/* Footer */}
         <div className="mt-8 text-center text-slate-500 text-sm">
           <p>© 2024 Les Bâtisseurs Engagés. Tous droits réservés.</p>
         </div>

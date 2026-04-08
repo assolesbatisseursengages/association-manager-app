@@ -1,95 +1,91 @@
+import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
-import { useCallback, useEffect, useState } from "react";
-import { useLocation } from "wouter";
+import { TRPCClientError } from "@trpc/client";
+import { useCallback, useEffect, useMemo } from "react";
 
 type UseAuthOptions = {
   redirectOnUnauthenticated?: boolean;
+  redirectPath?: string;
 };
 
 export function useAuth(options?: UseAuthOptions) {
-  const { redirectOnUnauthenticated = false } = options ?? {};
-  const [, setLocation] = useLocation();
+  const { redirectOnUnauthenticated = false, redirectPath = getLoginUrl() } =
+    options ?? {};
+  const utils = trpc.useUtils();
 
-  const [sessionToken, setSessionToken] = useState<string>(() => {
-    if (typeof window === "undefined") return "";
-    return localStorage.getItem("sessionToken") ?? "";
+  const meQuery = trpc.auth.me.useQuery(undefined, {
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 
-  // Re-sync token from localStorage on focus or storage changes
-  useEffect(() => {
-    const syncToken = () => {
-      const token = localStorage.getItem("sessionToken") ?? "";
-      setSessionToken(token);
-    };
-    window.addEventListener("focus", syncToken);
-    window.addEventListener("storage", syncToken);
-    syncToken();
-    return () => {
-      window.removeEventListener("focus", syncToken);
-      window.removeEventListener("storage", syncToken);
-    };
-  }, []);
-
-  const verifyQuery = trpc.localAuth.verifySession.useQuery(
-    { sessionToken },
-    {
-      enabled: Boolean(sessionToken),
-      retry: false,
-      refetchOnWindowFocus: false,
-    }
-  );
-
-  const logoutMutation = trpc.localAuth.logout.useMutation();
+  const logoutMutation = trpc.auth.logout.useMutation({
+    onSuccess: () => {
+      utils.auth.me.setData(undefined, null);
+    },
+  });
 
   const logout = useCallback(async () => {
     try {
-      const token = localStorage.getItem("sessionToken");
-      if (token) {
-        await logoutMutation.mutateAsync({ sessionToken: token });
-      }
-    } catch {
-      // ignore
-    } finally {
+      // Supprimer le cookie de session locale
+      document.cookie =
+        "session_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;";
       localStorage.removeItem("sessionToken");
       localStorage.removeItem("userId");
       localStorage.removeItem("userName");
-      setSessionToken("");
-      setLocation("/login");
-    }
-  }, [logoutMutation, setLocation]);
 
-  const user = verifyQuery.data
-    ? {
-        id: verifyQuery.data.userId,
-        name: verifyQuery.data.name ?? "Utilisateur",
-        email: verifyQuery.data.email ?? "",
-        role: verifyQuery.data.role ?? "lecteur",
-        openId: String(verifyQuery.data.userId),
-        loginMethod: "local",
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        lastSignedIn: new Date(),
+      await logoutMutation.mutateAsync();
+    } catch (error: unknown) {
+      if (
+        error instanceof TRPCClientError &&
+        error.data?.code === "UNAUTHORIZED"
+      ) {
+        return;
       }
-    : null;
+      throw error;
+    } finally {
+      utils.auth.me.setData(undefined, null);
+      await utils.auth.me.invalidate();
+    }
+  }, [logoutMutation, utils]);
 
-  const loading = Boolean(sessionToken) && verifyQuery.isLoading;
-  const isAuthenticated = Boolean(verifyQuery.data);
+  const state = useMemo(() => {
+    localStorage.setItem(
+      "manus-runtime-user-info",
+      JSON.stringify(meQuery.data)
+    );
+    return {
+      user: meQuery.data ?? null,
+      loading: meQuery.isLoading || logoutMutation.isPending,
+      error: meQuery.error ?? logoutMutation.error ?? null,
+      isAuthenticated: Boolean(meQuery.data),
+    };
+  }, [
+    meQuery.data,
+    meQuery.error,
+    meQuery.isLoading,
+    logoutMutation.error,
+    logoutMutation.isPending,
+  ]);
 
   useEffect(() => {
     if (!redirectOnUnauthenticated) return;
-    if (loading) return;
-    if (isAuthenticated) return;
-    if (!sessionToken) {
-      setLocation("/login");
-    }
-  }, [redirectOnUnauthenticated, loading, isAuthenticated, sessionToken, setLocation]);
+    if (meQuery.isLoading || logoutMutation.isPending) return;
+    if (state.user) return;
+    if (typeof window === "undefined") return;
+    if (window.location.pathname === redirectPath) return;
+
+    window.location.href = redirectPath;
+  }, [
+    redirectOnUnauthenticated,
+    redirectPath,
+    logoutMutation.isPending,
+    meQuery.isLoading,
+    state.user,
+  ]);
 
   return {
-    user,
-    loading,
-    error: verifyQuery.error ?? null,
-    isAuthenticated,
-    refresh: () => verifyQuery.refetch(),
+    ...state,
+    refresh: () => meQuery.refetch(),
     logout,
   };
 }
