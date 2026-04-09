@@ -56,22 +56,34 @@ const schema = {
   globalSettings
 };
 
-export async function getDb() {
-  if (!_db && process.env.DATABASE_URL) {
-    try {
-      const connectionString = process.env.DATABASE_URL;
-      const url = new URL(connectionString);
-      
-      const connectionConfig = {
-        host: url.hostname,
-        port: parseInt(url.port) || 4000,
-        user: decodeURIComponent(url.username),
-        password: decodeURIComponent(url.password),
-        database: url.pathname.substring(1),
-        ssl: {
-          rejectUnauthorized: false,
-          minVersion: 'TLSv1.2' as const,
-        }
+export async function listCrmContacts(filters?: { segment?: string; status?: string; search?: string }): Promise<CrmContact[]> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const conditions = [];
+
+  if (filters?.segment) {
+    conditions.push(eq(crmContacts.segment, filters.segment));
+  }
+  if (filters?.status) {
+    conditions.push(eq(crmContacts.status, filters.status as "prospect" | "active" | "inactive" | "archived"));
+  }
+  if (filters?.search) {
+    const term = `%${filters.search}%`;
+    conditions.push(or(
+      like(crmContacts.firstName, term),
+      like(crmContacts.lastName, term),
+      like(crmContacts.email, term),
+      like(crmContacts.company, term),
+    ));
+  }
+
+  const query = db.select().from(crmContacts);
+  if (conditions.length > 0) {
+    return query.where(and(...conditions)) as Promise<CrmContact[]>;
+  }
+  return query as Promise<CrmContact[]>;
+}
       };
       
       const client = await mysql.createConnection(connectionConfig);
@@ -615,7 +627,30 @@ export async function getCrmContact(id: number): Promise<CrmContact | undefined>
 export async function listCrmContacts(filters?: { segment?: string; status?: string; search?: string }): Promise<CrmContact[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return (db as any).query.crmContacts.findMany() as Promise<CrmContact[]>;
+
+  const conditions = [];
+
+  if (filters?.segment) {
+    conditions.push(eq(crmContacts.segment, filters.segment));
+  }
+  if (filters?.status) {
+    conditions.push(eq(crmContacts.status, filters.status as "prospect" | "active" | "inactive" | "archived"));
+  }
+  if (filters?.search) {
+    const term = `%${filters.search}%`;
+    conditions.push(or(
+      like(crmContacts.firstName, term),
+      like(crmContacts.lastName, term),
+      like(crmContacts.email, term),
+      like(crmContacts.company, term),
+    ));
+  }
+
+  const query = db.select().from(crmContacts);
+  if (conditions.length > 0) {
+    return query.where(and(...conditions)) as Promise<CrmContact[]>;
+  }
+  return query as Promise<CrmContact[]>;
 }
 
 export async function updateCrmContact(id: number, data: Partial<InsertCrmContact>): Promise<CrmContact> {
@@ -681,7 +716,12 @@ export async function updateAdhesionPipeline(id: number, data: Partial<InsertAdh
 export async function listAdhesionPipeline(stage?: string): Promise<AdhesionPipeline[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return (db as any).query.adhesionPipeline.findMany();
+
+  if (stage) {
+    return db.select().from(adhesionPipeline)
+      .where(eq(adhesionPipeline.stage, stage as "inquiry" | "application" | "review" | "approved" | "rejected" | "member")) as Promise<AdhesionPipeline[]>;
+  }
+  return db.select().from(adhesionPipeline) as Promise<AdhesionPipeline[]>;
 }
 
 // ============ CRM REPORTS FUNCTIONS ============
@@ -696,7 +736,12 @@ export async function createCrmReport(data: InsertCrmReport): Promise<CrmReport>
 export async function listCrmReports(type?: string): Promise<CrmReport[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await (db as any).query.crmReports.findMany() as any;
+
+  if (type) {
+    return db.select().from(crmReports)
+      .where(eq(crmReports.type, type as "engagement" | "pipeline" | "activity" | "segment" | "custom")) as Promise<CrmReport[]>;
+  }
+  return db.select().from(crmReports) as Promise<CrmReport[]>;
 }
 
 // ============ CRM EMAIL INTEGRATION FUNCTIONS ============
