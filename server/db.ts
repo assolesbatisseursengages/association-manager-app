@@ -56,64 +56,32 @@ const schema = {
   globalSettings
 };
 
-export async function listCrmContacts(filters?: { segment?: string; status?: string; search?: string }): Promise<CrmContact[]> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
+export async function getDb() {
+  if (_db) return _db;
 
-  const conditions = [];
-
-  if (filters?.segment) {
-    conditions.push(eq(crmContacts.segment, filters.segment));
-  }
-  if (filters?.status) {
-    conditions.push(eq(crmContacts.status, filters.status as "prospect" | "active" | "inactive" | "archived"));
-  }
-  if (filters?.search) {
-    const term = `%${filters.search}%`;
-    conditions.push(or(
-      like(crmContacts.firstName, term),
-      like(crmContacts.lastName, term),
-      like(crmContacts.email, term),
-      like(crmContacts.company, term),
-    ));
-  }
-
-  const query = db.select().from(crmContacts);
-  if (conditions.length > 0) {
-    return query.where(and(...conditions)) as Promise<CrmContact[]>;
-  }
-  return query as Promise<CrmContact[]>;
-}
-      };
-      
-      const client = await mysql.createConnection(connectionConfig);
-      _db = drizzle(client, { schema, mode: 'default' }) as any;
+  if (process.env.DATABASE_URL) {
+    try {
+      _db = drizzle(process.env.DATABASE_URL!, { schema, mode: 'default' }) as any;
+      console.log("[Database] Connected successfully");
+      return _db;
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
     }
   }
-  return _db;
+  return null;
 }
 
 // ============ USER FUNCTIONS ============
 export async function upsertUser(user: InsertUser): Promise<void> {
-  if (!user.openId) {
-    throw new Error("User openId is required for upsert");
-  }
+  if (!user.openId) throw new Error("User openId is required for upsert");
 
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot upsert user: database not available");
-    return;
-  }
+  if (!db) { console.warn("[Database] Cannot upsert user: database not available"); return; }
 
   try {
-    const values: InsertUser = {
-      openId: user.openId,
-    };
+    const values: InsertUser = { openId: user.openId };
     const updateSet: Record<string, unknown> = {};
-
     const textFields = ["name", "email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
 
@@ -124,32 +92,15 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       values[field] = normalized;
       updateSet[field] = normalized;
     };
-
     textFields.forEach(assignNullable);
 
-    if (user.lastSignedIn !== undefined) {
-      values.lastSignedIn = user.lastSignedIn;
-      updateSet.lastSignedIn = user.lastSignedIn;
-    }
-    if (user.role !== undefined) {
-      values.role = user.role;
-      updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
-      values.role = 'admin';
-      updateSet.role = 'admin';
-    }
+    if (user.lastSignedIn !== undefined) { values.lastSignedIn = user.lastSignedIn; updateSet.lastSignedIn = user.lastSignedIn; }
+    if (user.role !== undefined) { values.role = user.role; updateSet.role = user.role; }
+    else if (user.openId === ENV.ownerOpenId) { values.role = 'admin'; updateSet.role = 'admin'; }
+    if (!values.lastSignedIn) values.lastSignedIn = new Date();
+    if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
 
-    if (!values.lastSignedIn) {
-      values.lastSignedIn = new Date();
-    }
-
-    if (Object.keys(updateSet).length === 0) {
-      updateSet.lastSignedIn = new Date();
-    }
-
-    await db.insert(users).values(values).onDuplicateKeyUpdate({
-      set: updateSet,
-    });
+    await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -158,11 +109,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
-  if (!db) {
-    console.warn("[Database] Cannot get user: database not available");
-    return undefined;
-  }
-
+  if (!db) { console.warn("[Database] Cannot get user: database not available"); return undefined; }
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
@@ -191,7 +138,6 @@ export async function createCategory(data: InsertCategory) {
 export async function seedDefaultCategories() {
   const db = await getDb();
   if (!db) return;
-  
   try {
     const existing = await db.select().from(categories);
     if (existing.length > 0) return;
@@ -199,7 +145,6 @@ export async function seedDefaultCategories() {
     console.warn("[Database] Error checking categories:", error);
     return;
   }
-
   const defaultCategories: InsertCategory[] = [
     { name: "Documents Juridiques", slug: "juridique", description: "Statuts, règlements, autorisations", color: "#e76f51", icon: "scale", sortOrder: 1 },
     { name: "Gouvernance et Pilotage", slug: "gouvernance", description: "Feuille de route, organigramme, PV", color: "#2d7a4f", icon: "users", sortOrder: 2 },
@@ -209,7 +154,6 @@ export async function seedDefaultCategories() {
     { name: "Communication", slug: "communication", description: "Logo, brochures, réseaux sociaux", color: "#00b4d8", icon: "megaphone", sortOrder: 6 },
     { name: "Financement", slug: "financement", description: "Demandes, partenariats, subventions", color: "#e9c46a", icon: "hand-coins", sortOrder: 7 },
   ];
-
   await db.insert(categories).values(defaultCategories);
 }
 
@@ -225,34 +169,14 @@ export async function getAllDocuments(filters?: {
   if (!db) return [];
 
   const conditions = [];
+  if (filters?.categoryId) conditions.push(eq(documents.categoryId, filters.categoryId));
+  if (filters?.status) conditions.push(eq(documents.status, filters.status as "pending" | "in-progress" | "completed"));
+  if (filters?.priority) conditions.push(eq(documents.priority, filters.priority as "low" | "medium" | "high" | "urgent"));
+  if (filters?.search) conditions.push(or(like(documents.title, `%${filters.search}%`), like(documents.description, `%${filters.search}%`)));
+  if (filters?.isArchived !== undefined) conditions.push(eq(documents.isArchived, filters.isArchived));
+  else conditions.push(eq(documents.isArchived, false));
 
-  if (filters?.categoryId) {
-    conditions.push(eq(documents.categoryId, filters.categoryId));
-  }
-  if (filters?.status) {
-    conditions.push(eq(documents.status, filters.status as "pending" | "in-progress" | "completed"));
-  }
-  if (filters?.priority) {
-    conditions.push(eq(documents.priority, filters.priority as "low" | "medium" | "high" | "urgent"));
-  }
-  if (filters?.search) {
-    conditions.push(
-      or(
-        like(documents.title, `%${filters.search}%`),
-        like(documents.description, `%${filters.search}%`)
-      )
-    );
-  }
-  if (filters?.isArchived !== undefined) {
-    conditions.push(eq(documents.isArchived, filters.isArchived));
-  } else {
-    conditions.push(eq(documents.isArchived, false));
-  }
-
-  if (conditions.length > 0) {
-    return db.select().from(documents).where(and(...conditions)).orderBy(desc(documents.updatedAt));
-  }
-  
+  if (conditions.length > 0) return db.select().from(documents).where(and(...conditions)).orderBy(desc(documents.updatedAt));
   return db.select().from(documents).where(eq(documents.isArchived, false)).orderBy(desc(documents.updatedAt));
 }
 
@@ -287,29 +211,34 @@ export async function getDocumentStats() {
   const db = await getDb();
   if (!db) return { total: 0, completed: 0, inProgress: 0, pending: 0, urgent: 0 };
 
-  const allDocs = await db.select().from(documents).where(eq(documents.isArchived, false));
-  
+  const [stats] = await db
+    .select({
+      total: sql<number>`COUNT(*)`,
+      completed: sql<number>`COUNT(CASE WHEN ${documents.status} = 'completed' THEN 1 END)`,
+      inProgress: sql<number>`COUNT(CASE WHEN ${documents.status} = 'in-progress' THEN 1 END)`,
+      pending: sql<number>`COUNT(CASE WHEN ${documents.status} = 'pending' THEN 1 END)`,
+      urgent: sql<number>`COUNT(CASE WHEN ${documents.priority} = 'urgent' THEN 1 END)`,
+    })
+    .from(documents)
+    .where(eq(documents.isArchived, false));
+
   return {
-    total: allDocs.length,
-    completed: allDocs.filter(d => d.status === "completed").length,
-    inProgress: allDocs.filter(d => d.status === "in-progress").length,
-    pending: allDocs.filter(d => d.status === "pending").length,
-    urgent: allDocs.filter(d => d.priority === "urgent").length,
+    total: Number(stats?.total ?? 0),
+    completed: Number(stats?.completed ?? 0),
+    inProgress: Number(stats?.inProgress ?? 0),
+    pending: Number(stats?.pending ?? 0),
+    urgent: Number(stats?.urgent ?? 0),
   };
 }
 
 export async function seedDefaultDocuments() {
   const db = await getDb();
   if (!db) return;
-  
   const existing = await db.select().from(documents).limit(1);
   if (existing.length > 0) return;
-
   const cats = await getAllCategories();
   if (cats.length === 0) return;
-
   const catMap = Object.fromEntries(cats.map(c => [c.slug, c.id]));
-
   const defaultDocs: InsertDocument[] = [
     { title: "Statuts de l'association", description: "Version validée et conforme", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
     { title: "Règlement intérieur", description: "Règles de fonctionnement interne", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
@@ -327,7 +256,6 @@ export async function seedDefaultDocuments() {
     { title: "Logo officiel", description: "Identité visuelle", categoryId: catMap["communication"], priority: "high", status: "pending" },
     { title: "Dossier de demande de financement", description: "Template pour bailleurs", categoryId: catMap["financement"], priority: "urgent", status: "pending" },
   ];
-
   await db.insert(documents).values(defaultDocs);
 }
 
@@ -402,8 +330,7 @@ export async function getRecentActivity(limit: number = 20) {
 export async function createCotisation(data: InsertCotisation) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(cotisations).values(data);
-  return result;
+  return await db.insert(cotisations).values(data);
 }
 
 export async function getCotisations() {
@@ -463,33 +390,48 @@ export async function getTransactions() {
   return await db.select().from(transactions);
 }
 
-// ============ STATISTIQUES FINANCIÈRES ============
+// ============ STATISTIQUES FINANCIÈRES — SQL SUM (plus de reduce JS) ============
 export async function getFinancialStats() {
   const db = await getDb();
   if (!db) return null;
-  
-  const allCotisations = await db.select().from(cotisations);
-  const allDons = await db.select().from(dons);
-  const allDepenses = await db.select().from(depenses);
-  
-  const totalCotisations = allCotisations.reduce((sum, c) => sum + parseFloat(c.montant), 0);
-  const totalDons = allDons.reduce((sum, d) => sum + parseFloat(d.montant), 0);
-  const totalDepenses = allDepenses.reduce((sum, d) => sum + parseFloat(d.montant), 0);
-  
-  const cotisationsPayees = allCotisations.filter(c => c.statut === "payée").length;
-  const cotisationsEnAttente = allCotisations.filter(c => c.statut === "en attente").length;
-  const cotisationsEnRetard = allCotisations.filter(c => c.statut === "en retard").length;
-  
+
+  const [cotisationsStats] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${cotisations.montant}), 0)`,
+      payees: sql<number>`COUNT(CASE WHEN ${cotisations.statut} = 'payée' THEN 1 END)`,
+      enAttente: sql<number>`COUNT(CASE WHEN ${cotisations.statut} = 'en attente' THEN 1 END)`,
+      enRetard: sql<number>`COUNT(CASE WHEN ${cotisations.statut} = 'en retard' THEN 1 END)`,
+    })
+    .from(cotisations);
+
+  const [donsStats] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${dons.montant}), 0)`,
+      nombre: sql<number>`COUNT(*)`,
+    })
+    .from(dons);
+
+  const [depensesStats] = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${depenses.montant}), 0)`,
+      nombre: sql<number>`COUNT(*)`,
+    })
+    .from(depenses);
+
+  const totalCotisations = Number(cotisationsStats?.total ?? 0);
+  const totalDons = Number(donsStats?.total ?? 0);
+  const totalDepenses = Number(depensesStats?.total ?? 0);
+
   return {
     totalCotisations,
     totalDons,
     totalDepenses,
     solde: totalCotisations + totalDons - totalDepenses,
-    cotisationsPayees,
-    cotisationsEnAttente,
-    cotisationsEnRetard,
-    nombreDons: allDons.length,
-    nombreDepenses: allDepenses.length,
+    cotisationsPayees: Number(cotisationsStats?.payees ?? 0),
+    cotisationsEnAttente: Number(cotisationsStats?.enAttente ?? 0),
+    cotisationsEnRetard: Number(cotisationsStats?.enRetard ?? 0),
+    nombreDons: Number(donsStats?.nombre ?? 0),
+    nombreDepenses: Number(depensesStats?.nombre ?? 0),
   };
 }
 
@@ -592,7 +534,6 @@ export async function getAllAppSettings(): Promise<AppSetting[]> {
 export async function updateAppSetting(key: string, value: string, updatedBy: number, description?: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   const existing = await getAppSetting(key);
   if (existing) {
     await db.update(appSettings).set({ value, description, updatedBy, updatedAt: new Date() }).where(eq(appSettings.key, key));
@@ -613,15 +554,16 @@ export async function deleteAppSetting(key: string) {
 export async function createCrmContact(data: InsertCrmContact): Promise<CrmContact> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await (db as any).insert(crmContacts).values(data);
-  const contact = await (db as any).query.crmContacts.findFirst({ where: eq(crmContacts.id, result[0].insertId) });
-  return contact as CrmContact;
+  const result = await db.insert(crmContacts).values(data);
+  const contact = await db.select().from(crmContacts).where(eq(crmContacts.id, result[0].insertId)).limit(1);
+  return contact[0] as CrmContact;
 }
 
 export async function getCrmContact(id: number): Promise<CrmContact | undefined> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return (db as any).query.crmContacts.findFirst({ where: eq(crmContacts.id, id) });
+  const result = await db.select().from(crmContacts).where(eq(crmContacts.id, id)).limit(1);
+  return result[0];
 }
 
 export async function listCrmContacts(filters?: { segment?: string; status?: string; search?: string }): Promise<CrmContact[]> {
@@ -629,13 +571,8 @@ export async function listCrmContacts(filters?: { segment?: string; status?: str
   if (!db) throw new Error("Database not available");
 
   const conditions = [];
-
-  if (filters?.segment) {
-    conditions.push(eq(crmContacts.segment, filters.segment));
-  }
-  if (filters?.status) {
-    conditions.push(eq(crmContacts.status, filters.status as "prospect" | "active" | "inactive" | "archived"));
-  }
+  if (filters?.segment) conditions.push(eq(crmContacts.segment, filters.segment));
+  if (filters?.status) conditions.push(eq(crmContacts.status, filters.status as "prospect" | "active" | "inactive" | "archived"));
   if (filters?.search) {
     const term = `%${filters.search}%`;
     conditions.push(or(
@@ -647,76 +584,73 @@ export async function listCrmContacts(filters?: { segment?: string; status?: str
   }
 
   const query = db.select().from(crmContacts);
-  if (conditions.length > 0) {
-    return query.where(and(...conditions)) as Promise<CrmContact[]>;
-  }
+  if (conditions.length > 0) return query.where(and(...conditions)) as Promise<CrmContact[]>;
   return query as Promise<CrmContact[]>;
 }
 
 export async function updateCrmContact(id: number, data: Partial<InsertCrmContact>): Promise<CrmContact> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await (db as any).update(crmContacts).set({ ...data, updatedAt: new Date() }).where(eq(crmContacts.id, id));
-  const contact = await (db as any).query.crmContacts.findFirst({ where: eq(crmContacts.id, id) });
-  return contact as CrmContact;
+  await db.update(crmContacts).set({ ...data, updatedAt: new Date() }).where(eq(crmContacts.id, id));
+  const result = await db.select().from(crmContacts).where(eq(crmContacts.id, id)).limit(1);
+  return result[0] as CrmContact;
 }
 
 export async function deleteCrmContact(id: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await (db as any).delete(crmContacts).where(eq(crmContacts.id, id));
+  await db.delete(crmContacts).where(eq(crmContacts.id, id));
 }
 
 // ============ CRM ACTIVITIES FUNCTIONS ============
 export async function createCrmActivity(data: InsertCrmActivity): Promise<CrmActivity> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await (db as any).insert(crmActivities).values(data);
-  const activity = await (db as any).query.crmActivities.findFirst({ where: eq(crmActivities.id, result[0].insertId) });
-  return activity as CrmActivity;
+  const result = await db.insert(crmActivities).values(data);
+  const activity = await db.select().from(crmActivities).where(eq(crmActivities.id, result[0].insertId)).limit(1);
+  return activity[0] as CrmActivity;
 }
 
 export async function listCrmActivities(contactId: number): Promise<CrmActivity[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return (db as any).query.crmActivities.findMany({ where: eq(crmActivities.contactId, contactId) });
+  return db.select().from(crmActivities).where(eq(crmActivities.contactId, contactId)) as Promise<CrmActivity[]>;
 }
 
 export async function updateCrmActivity(id: number, data: Partial<InsertCrmActivity>): Promise<CrmActivity> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await (db as any).update(crmActivities).set({ ...data, updatedAt: new Date() }).where(eq(crmActivities.id, id));
-  const activity = await (db as any).query.crmActivities.findFirst({ where: eq(crmActivities.id, id) });
-  return activity as CrmActivity;
+  await db.update(crmActivities).set({ ...data, updatedAt: new Date() }).where(eq(crmActivities.id, id));
+  const result = await db.select().from(crmActivities).where(eq(crmActivities.id, id)).limit(1);
+  return result[0] as CrmActivity;
 }
 
 export async function deleteCrmActivity(id: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await (db as any).delete(crmActivities).where(eq(crmActivities.id, id));
+  await db.delete(crmActivities).where(eq(crmActivities.id, id));
 }
 
 // ============ ADHESION PIPELINE FUNCTIONS ============
 export async function createAdhesionPipeline(data: InsertAdhesionPipeline): Promise<AdhesionPipeline> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await (db as any).insert(adhesionPipeline).values(data);
-  const pipeline = await (db as any).query.adhesionPipeline.findFirst({ where: eq(adhesionPipeline.id, result[0].insertId) });
-  return pipeline as AdhesionPipeline;
+  const result = await db.insert(adhesionPipeline).values(data);
+  const pipeline = await db.select().from(adhesionPipeline).where(eq(adhesionPipeline.id, result[0].insertId)).limit(1);
+  return pipeline[0] as AdhesionPipeline;
 }
 
 export async function updateAdhesionPipeline(id: number, data: Partial<InsertAdhesionPipeline>): Promise<AdhesionPipeline> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await (db as any).update(adhesionPipeline).set({ ...data, updatedAt: new Date() }).where(eq(adhesionPipeline.id, id));
-  const pipeline = await (db as any).query.adhesionPipeline.findFirst({ where: eq(adhesionPipeline.id, id) });
-  return pipeline as AdhesionPipeline;
+  await db.update(adhesionPipeline).set({ ...data, updatedAt: new Date() }).where(eq(adhesionPipeline.id, id));
+  const result = await db.select().from(adhesionPipeline).where(eq(adhesionPipeline.id, id)).limit(1);
+  return result[0] as AdhesionPipeline;
 }
 
 export async function listAdhesionPipeline(stage?: string): Promise<AdhesionPipeline[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   if (stage) {
     return db.select().from(adhesionPipeline)
       .where(eq(adhesionPipeline.stage, stage as "inquiry" | "application" | "review" | "approved" | "rejected" | "member")) as Promise<AdhesionPipeline[]>;
@@ -728,15 +662,14 @@ export async function listAdhesionPipeline(stage?: string): Promise<AdhesionPipe
 export async function createCrmReport(data: InsertCrmReport): Promise<CrmReport> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await (db as any).insert(crmReports).values(data);
-  const report = await (db as any).query.crmReports.findFirst({ where: eq(crmReports.id, result[0].insertId as any) });
-  return report as CrmReport;
+  const result = await db.insert(crmReports).values(data);
+  const report = await db.select().from(crmReports).where(eq(crmReports.id, result[0].insertId)).limit(1);
+  return report[0] as CrmReport;
 }
 
 export async function listCrmReports(type?: string): Promise<CrmReport[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   if (type) {
     return db.select().from(crmReports)
       .where(eq(crmReports.type, type as "engagement" | "pipeline" | "activity" | "segment" | "custom")) as Promise<CrmReport[]>;
@@ -748,15 +681,15 @@ export async function listCrmReports(type?: string): Promise<CrmReport[]> {
 export async function createCrmEmailIntegration(data: InsertCrmEmailIntegration): Promise<CrmEmailIntegration> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await (db as any).insert(crmEmailIntegration).values(data);
-  const email = await (db as any).query.crmEmailIntegration.findFirst({ where: eq(crmEmailIntegration.id, result[0].insertId as any) });
-  return email as CrmEmailIntegration;
+  const result = await db.insert(crmEmailIntegration).values(data);
+  const email = await db.select().from(crmEmailIntegration).where(eq(crmEmailIntegration.id, result[0].insertId)).limit(1);
+  return email[0] as CrmEmailIntegration;
 }
 
 export async function listCrmEmailIntegration(contactId: number): Promise<CrmEmailIntegration[]> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return await (db as any).query.crmEmailIntegration.findMany({ where: eq(crmEmailIntegration.contactId, contactId) }) as any;
+  return db.select().from(crmEmailIntegration).where(eq(crmEmailIntegration.contactId, contactId)) as Promise<CrmEmailIntegration[]>;
 }
 
 // ============ GLOBAL SETTINGS ============
@@ -770,7 +703,6 @@ export async function getGlobalSettings() {
 export async function updateGlobalSettings(data: Partial<InsertGlobalSettings>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   const existing = await getGlobalSettings();
   if (existing) {
     await db.update(globalSettings).set(data).where(eq(globalSettings.id, existing.id));
@@ -784,7 +716,6 @@ export async function updateGlobalSettings(data: Partial<InsertGlobalSettings>) 
 export async function initializeGlobalSettings() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
   const existing = await getGlobalSettings();
   if (!existing) {
     await db.insert(globalSettings).values({
@@ -805,15 +736,12 @@ export async function initializeGlobalSettings() {
 export async function initializeDefaultAdmin() {
   const db = await getDb();
   if (!db) return;
-  
   try {
     const existing = await getLocalUserByEmail("admin@association.fr");
     if (existing) return;
-    
     const bcrypt = await import("bcryptjs");
     const hashedPassword = await bcrypt.default.hash("Admin123!", 10);
     const localUser = await createLocalUser("admin@association.fr", hashedPassword);
-    
     await db.update(users).set({ role: "admin" }).where(eq(users.id, localUser.userId));
     console.log("[Database] Default admin user created: admin@association.fr");
   } catch (error) {
@@ -825,7 +753,6 @@ export async function initializeDefaultAdmin() {
 export async function createLocalUser(email: string, passwordHash: string, userId?: number): Promise<UserLocal> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     let actualUserId = userId;
     if (!actualUserId) {
@@ -837,14 +764,12 @@ export async function createLocalUser(email: string, passwordHash: string, userI
       });
       actualUserId = result[0].insertId as number;
     }
-
     const result = await db.insert(usersLocal).values({
       userId: actualUserId,
       email,
       passwordHash,
       isEmailVerified: false,
     });
-
     return {
       id: result[0].insertId as number,
       userId: actualUserId,
@@ -868,7 +793,6 @@ export async function createLocalUser(email: string, passwordHash: string, userI
 export async function getLocalUserByEmail(email: string): Promise<UserLocal | null> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     const result = await db.select().from(usersLocal).where(eq(usersLocal.email, email)).limit(1);
     return result[0] || null;
@@ -881,7 +805,6 @@ export async function getLocalUserByEmail(email: string): Promise<UserLocal | nu
 export async function getLocalUserByUserId(userId: number): Promise<UserLocal | null> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     const result = await db.select().from(usersLocal).where(eq(usersLocal.userId, userId)).limit(1);
     return result[0] || null;
@@ -894,7 +817,6 @@ export async function getLocalUserByUserId(userId: number): Promise<UserLocal | 
 export async function updateLocalUserPassword(userId: number, newPasswordHash: string): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     await db.update(usersLocal).set({
       passwordHash: newPasswordHash,
@@ -910,7 +832,6 @@ export async function updateLocalUserPassword(userId: number, newPasswordHash: s
 export async function updateLastLoginTime(userId: number): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     await db.update(usersLocal).set({ lastLoginAt: new Date() }).where(eq(usersLocal.userId, userId));
   } catch (error) {
@@ -922,21 +843,17 @@ export async function updateLastLoginTime(userId: number): Promise<void> {
 export async function createUserSession(userId: number, token: string, userAgent?: string, ipAddress?: string): Promise<UserSession> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     const result = await db.insert(userSessions).values({
-      userId,
-      token,
+      userId, token,
       userAgent: userAgent || null,
       ipAddress: ipAddress || null,
       expiresAt,
     });
-
     return {
       id: result[0].insertId as number,
-      userId,
-      token,
+      userId, token,
       userAgent: userAgent || null,
       ipAddress: ipAddress || null,
       expiresAt,
@@ -951,13 +868,9 @@ export async function createUserSession(userId: number, token: string, userAgent
 export async function getUserSessionByToken(token: string): Promise<UserSession | null> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     const result = await db.select().from(userSessions).where(
-      and(
-        eq(userSessions.token, token),
-        sql`${userSessions.expiresAt} > NOW()`
-      )
+      and(eq(userSessions.token, token), sql`${userSessions.expiresAt} > NOW()`)
     ).limit(1);
     return result[0] || null;
   } catch (error) {
@@ -969,7 +882,6 @@ export async function getUserSessionByToken(token: string): Promise<UserSession 
 export async function deleteUserSession(token: string): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     await db.delete(userSessions).where(eq(userSessions.token, token));
   } catch (error) {
@@ -981,7 +893,6 @@ export async function deleteUserSession(token: string): Promise<void> {
 export async function cleanupExpiredSessions(): Promise<void> {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-
   try {
     await db.delete(userSessions).where(sql`${userSessions.expiresAt} < NOW()`);
   } catch (error) {
