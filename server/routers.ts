@@ -25,8 +25,8 @@ import { mediaRouter } from "./routers/media";
 
 import { z } from "zod";
 import { 
-  getAllCategories, getCategoryById, createCategory, seedDefaultCategories,
-  getAllDocuments, getDocumentById, createDocument, updateDocument, deleteDocument, getDocumentStats, seedDefaultDocuments,
+  getAllCategories, getCategoryById, createCategory,
+  getAllDocuments, getDocumentById, createDocument, updateDocument, deleteDocument, getDocumentStats,
   getNotesByDocumentId, createNote, deleteNote,
   getAllMembers, getMemberById, createMember, updateMember, deleteMember,
   logActivity, getRecentActivity,
@@ -35,17 +35,15 @@ import {
   createDepense, getDepenses,
   createTransaction, getTransactions,
   getFinancialStats,
-  getGlobalSettings, updateGlobalSettings, initializeGlobalSettings, initializeDefaultAdmin,
+  getGlobalSettings, updateGlobalSettings,
   getDb
 } from "./db";
 import { roles, permissions, auditLogs, emailTemplates, emailHistory, emailRecipients } from "../drizzle/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and } from "drizzle-orm";
 import { logAudit } from "./audit";
 import { storagePut } from "./storage";
 import { notifyOwner } from "./_core/notification";
 import { nanoid } from "nanoid";
-
-// Note: Email procedures are now in email-router.ts and imported above
 
 export const appRouter = router({
   system: systemRouter,
@@ -72,9 +70,6 @@ export const appRouter = router({
   // ============ CATEGORIES ============
   categories: router({
     list: publicProcedure.query(async () => {
-      await initializeGlobalSettings();
-      await initializeDefaultAdmin();
-      await seedDefaultCategories();
       return getAllCategories();
     }),
     
@@ -115,10 +110,6 @@ export const appRouter = router({
         isArchived: z.boolean().optional(),
       }).optional())
       .query(async ({ input }) => {
-        await initializeGlobalSettings();
-        await initializeDefaultAdmin();
-        await seedDefaultCategories();
-        await seedDefaultDocuments();
         return getAllDocuments(input);
       }),
     
@@ -127,10 +118,6 @@ export const appRouter = router({
       .query(async ({ input }) => getDocumentById(input.id)),
     
     stats: publicProcedure.query(async () => {
-      await initializeGlobalSettings();
-      await initializeDefaultAdmin();
-      await seedDefaultCategories();
-      await seedDefaultDocuments();
       return getDocumentStats();
     }),
     
@@ -210,17 +197,9 @@ export const appRouter = router({
       }))
       .mutation(async ({ input, ctx }) => {
         const { documentId, fileName, fileType, fileSize, fileBase64 } = input;
-        
-        // Convert base64 to buffer
         const fileBuffer = Buffer.from(fileBase64, "base64");
-        
-        // Generate unique file key
         const fileKey = `documents/${documentId}/${nanoid()}-${fileName}`;
-        
-        // Upload to S3
         const { url } = await storagePut(fileKey, fileBuffer, fileType);
-        
-        // Update document with file info
         await updateDocument(documentId, {
           fileUrl: url,
           fileKey,
@@ -229,7 +208,6 @@ export const appRouter = router({
           fileSize,
           updatedBy: ctx.user.id,
         });
-        
         await logActivity({
           userId: ctx.user.id,
           action: "upload",
@@ -237,12 +215,10 @@ export const appRouter = router({
           entityId: documentId,
           details: `Fichier "${fileName}" uploadé`,
         });
-        
         await notifyOwner({
           title: "Fichier uploadé",
           content: `Le fichier "${fileName}" a été uploadé par ${ctx.user.name || "un utilisateur"}.`,
         });
-        
         return { success: true, url, fileKey };
       }),
     
@@ -267,7 +243,6 @@ export const appRouter = router({
         return { success: true };
       }),
     
-    // Export documents report data
     exportReport: publicProcedure
       .input(z.object({
         categoryId: z.number().optional(),
@@ -277,9 +252,7 @@ export const appRouter = router({
         const docs = await getAllDocuments(input);
         const cats = await getAllCategories();
         const stats = await getDocumentStats();
-        
         const catMap = Object.fromEntries(cats.map(c => [c.id, c.name]));
-        
         const reportData = docs.map(doc => ({
           id: doc.id,
           title: doc.title,
@@ -291,36 +264,22 @@ export const appRouter = router({
           createdAt: doc.createdAt,
           updatedAt: doc.updatedAt,
         }));
-        
-        return {
-          documents: reportData,
-          stats,
-          categories: cats,
-          generatedAt: new Date(),
-        };
+        return { documents: reportData, stats, categories: cats, generatedAt: new Date() };
       }),
     
-    // List archived documents
     archived: publicProcedure
       .input(z.object({
         categoryId: z.number().optional(),
         search: z.string().optional(),
       }).optional())
       .query(async ({ input }) => {
-        return getAllDocuments({
-          ...input,
-          isArchived: true,
-        });
+        return getAllDocuments({ ...input, isArchived: true });
       }),
     
-    // Archive a document
     archive: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const result = await updateDocument(input.id, {
-          isArchived: true,
-          updatedBy: ctx.user.id,
-        });
+        const result = await updateDocument(input.id, { isArchived: true, updatedBy: ctx.user.id });
         await logActivity({
           userId: ctx.user.id,
           action: "archive",
@@ -335,14 +294,10 @@ export const appRouter = router({
         return result;
       }),
     
-    // Restore an archived document
     restore: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
-        const result = await updateDocument(input.id, {
-          isArchived: false,
-          updatedBy: ctx.user.id,
-        });
+        const result = await updateDocument(input.id, { isArchived: false, updatedBy: ctx.user.id });
         await logActivity({
           userId: ctx.user.id,
           action: "restore",
@@ -468,7 +423,6 @@ export const appRouter = router({
         return { success: true };
       }),
     
-    // Export members list
     exportList: protectedProcedure.query(async () => {
       const membersList = await getAllMembers();
       return {
@@ -500,128 +454,64 @@ export const appRouter = router({
     stats: protectedProcedure.query(async () => getFinancialStats()),
   }),
 
-  // ============ ADMIN - ROLES & PERMISSIONS ============
+  // ============ ADMIN ============
   admin: router({
-    // Database migrations
     runMigrations: protectedProcedure.mutation(async ({ ctx }) => {
-      // Check if user is admin
-      if (ctx.user?.role !== "admin") {
-        throw new Error("Only admins can run migrations");
-      }
-
+      if (ctx.user?.role !== "admin") throw new Error("Only admins can run migrations");
       try {
         const db = await getDb();
-        if (!db) {
-          throw new Error("Database connection not available");
-        }
-
-        // Read SQL file
+        if (!db) throw new Error("Database connection not available");
         const fs = await import('fs');
         const path = await import('path');
         const sqlFile = path.join(process.cwd(), "drizzle", "migrations_clean.sql");
-        if (!fs.existsSync(sqlFile)) {
-          throw new Error("Migration SQL file not found");
-        }
-
+        if (!fs.existsSync(sqlFile)) throw new Error("Migration SQL file not found");
         const sql = fs.readFileSync(sqlFile, "utf8");
-        const statements = sql
-          .split(";")
-          .map((s: string) => s.trim())
-          .filter((s: string) => s.length > 0 && !s.startsWith("--"));
-
-        console.log(`📋 Running ${statements.length} SQL statements...`);
-
+        const statements = sql.split(";").map((s: string) => s.trim()).filter((s: string) => s.length > 0 && !s.startsWith("--"));
         let successCount = 0;
         let errorCount = 0;
         const errors: string[] = [];
-
         for (const statement of statements) {
           try {
             await db.execute(statement);
             successCount++;
           } catch (error: any) {
-            if (error.code === "ER_TABLE_EXISTS_ERROR") {
-              successCount++;
-            } else {
-              errorCount++;
-              errors.push(`${error.message}`);
-            }
+            if (error.code === "ER_TABLE_EXISTS_ERROR") { successCount++; }
+            else { errorCount++; errors.push(`${error.message}`); }
           }
         }
-
-        console.log(
-          `✅ Migrations completed: ${successCount} successful, ${errorCount} failed`
-        );
-
-        return {
-          success: true,
-          message: `Migrations completed: ${successCount} successful, ${errorCount} failed`,
-          successCount,
-          errorCount,
-          errors: errors.slice(0, 5),
-        };
+        return { success: true, message: `Migrations completed: ${successCount} successful, ${errorCount} failed`, successCount, errorCount, errors: errors.slice(0, 5) };
       } catch (error: any) {
-        console.error("❌ Migration error:", error);
         throw new Error(`Migration failed: ${error.message}`);
       }
     }),
 
-    // Roles management
     getRoles: protectedProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
-      try {
-        return await db.select().from(roles);
-      } catch (error) {
-        console.error("Failed to get roles:", error);
-        return [];
-      }
+      try { return await db.select().from(roles); }
+      catch (error) { console.error("Failed to get roles:", error); return []; }
     }),
 
     getPermissions: protectedProcedure.query(async () => {
       const db = await getDb();
       if (!db) return [];
-      try {
-        return await db.select().from(permissions);
-      } catch (error) {
-        console.error("Failed to get permissions:", error);
-        return [];
-      }
+      try { return await db.select().from(permissions); }
+      catch (error) { console.error("Failed to get permissions:", error); return []; }
     }),
 
     createRole: protectedProcedure
-      .input(z.object({
-        name: z.string().min(1),
-        description: z.string().optional(),
-      }))
+      .input(z.object({ name: z.string().min(1), description: z.string().optional() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
         if (!db) throw new Error("Database not available");
-        
         try {
-          const result = await db.insert(roles).values({
-            name: input.name,
-            description: input.description,
-            isSystem: false,
-          });
-          
-          // Log audit
-          await logAudit({
-            userId: ctx.user?.id,
-            action: "CREATE",
-            entityType: "roles",
-            entityName: input.name,
-            description: `Created role: ${input.name}`,
-            status: "success",
-          });
-          
+          const result = await db.insert(roles).values({ name: input.name, description: input.description, isSystem: false });
+          await logAudit({ userId: ctx.user?.id, action: "CREATE", entityType: "roles", entityName: input.name, description: `Created role: ${input.name}`, status: "success" });
           return result;
-        } catch (error) {
-          console.error("Failed to create role:", error);
-          throw error;
-        }
+        } catch (error) { console.error("Failed to create role:", error); throw error; }
       }),
 
+    // Corrigé : filtrage et pagination en SQL
     getAuditLogs: protectedProcedure
       .input(z.object({
         limit: z.number().default(100),
@@ -632,32 +522,28 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const db = await getDb();
         if (!db) return [];
-        
         try {
-          const result = await db.select().from(auditLogs);
-          let filtered = result;
-          
-          if (input.entityType) {
-            filtered = filtered.filter(log => log.entityType === input.entityType);
-          }
-          if (input.userId) {
-            filtered = filtered.filter(log => log.userId === input.userId);
-          }
-          
+          const conditions = [];
+          if (input.entityType) conditions.push(eq(auditLogs.entityType, input.entityType));
+          if (input.userId) conditions.push(eq(auditLogs.userId, input.userId));
+
+          const query = db.select().from(auditLogs);
+          const filtered = conditions.length > 0 ? query.where(and(...conditions)) : query;
+
           return filtered
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(input.offset, input.offset + input.limit);
+            .orderBy(desc(auditLogs.createdAt))
+            .limit(input.limit)
+            .offset(input.offset);
         } catch (error) {
           console.error("Failed to get audit logs:", error);
           return [];
         }
-       }),
+      }),
   }),
 
   // ============ GLOBAL SETTINGS ============
   globalSettings: router({
     get: publicProcedure.query(async () => {
-      await initializeGlobalSettings();
       return getGlobalSettings();
     }),
 
@@ -673,26 +559,12 @@ export const appRouter = router({
         description: z.string().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        if (ctx.user?.role !== "admin") {
-          throw new Error("Only admins can update global settings");
-        }
-        
-        const result = await updateGlobalSettings({
-          ...input,
-          updatedBy: ctx.user?.id,
-        });
-        
-        await logAudit({
-          userId: ctx.user?.id,
-          action: "UPDATE",
-          entityType: "globalSettings",
-          entityName: "Global Settings",
-          description: "Updated global settings",
-          status: "success",
-        });
-        
+        if (ctx.user?.role !== "admin") throw new Error("Only admins can update global settings");
+        const result = await updateGlobalSettings({ ...input, updatedBy: ctx.user?.id });
+        await logAudit({ userId: ctx.user?.id, action: "UPDATE", entityType: "globalSettings", entityName: "Global Settings", description: "Updated global settings", status: "success" });
         return result;
       }),
   }),
 });
+
 export type AppRouter = typeof appRouter;
