@@ -1,3 +1,4 @@
+import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -69,7 +70,7 @@ export const appRouter = router({
 
   // ============ CATEGORIES ============
   categories: router({
-    list: publicProcedure.query(async () => {
+    list: protectedProcedure.query(async () => {
       return getAllCategories();
     }),
     
@@ -117,7 +118,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => getDocumentById(input.id)),
     
-    stats: publicProcedure.query(async () => {
+    stats: protectedProcedure.query(async () => {
       return getDocumentStats();
     }),
     
@@ -547,19 +548,12 @@ export const appRouter = router({
       return getGlobalSettings();
     }),
 
-    update: protectedProcedure
-      .input(z.object({
-        associationName: z.string().optional(),
-        seatCity: z.string().optional(),
-        folio: z.string().optional(),
-        email: z.string().email("Email invalide").optional().or(z.literal('')),
-        website: z.string().optional(),
-        phone: z.string().optional(),
-        logo: z.string().nullable().optional(),
-        description: z.string().optional(),
-      }))
-      .mutation(async ({ input, ctx }) => {
-        if (ctx.user?.role !== "admin") throw new Error("Only admins can update global settings");
+update: adminProcedure
+  .input(z.object({
+    associationName: z.string().optional(),
+    ...
+  }))
+  .mutation(async ({ input, ctx }) => {
         const result = await updateGlobalSettings({ ...input, updatedBy: ctx.user?.id });
         await logAudit({ userId: ctx.user?.id, action: "UPDATE", entityType: "globalSettings", entityName: "Global Settings", description: "Updated global settings", status: "success" });
         return result;
