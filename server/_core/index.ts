@@ -1,4 +1,12 @@
 import "dotenv/config";
+
+// Vérification des variables d'environnement critiques au démarrage
+if (process.env.NODE_ENV === "production") {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("[Config] DATABASE_URL manquant en production — arrêt du serveur");
+  }
+}
+
 import express from "express";
 import { createServer } from "http";
 import net from "net";
