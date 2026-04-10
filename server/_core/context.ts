@@ -1,9 +1,9 @@
 /**
  * CONTEXT tRPC UNIFIÉ
  *
- * Authentification : cookie HttpOnly session_token uniquement.
- * Plus de fallback OAuth ni de localStorage.
- * Le cookie est posé par auth.login / auth.register (HttpOnly, SameSite=Lax).
+ * Lit le token depuis :
+ * 1. Header x-session-token (envoyé par main.tsx via localStorage)
+ * 2. Cookie session_token (fallback HttpOnly)
  */
 
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
@@ -24,9 +24,16 @@ export async function createContext(
   let user: User | null = null;
 
   try {
-    const cookieHeader = opts.req.headers.cookie ?? "";
-    const match = cookieHeader.match(/session_token=([^;]+)/);
-    const token = match?.[1];
+    // 1. Header x-session-token (priorité — envoyé par le frontend)
+    let token: string | undefined =
+      opts.req.headers["x-session-token"] as string | undefined;
+
+    // 2. Fallback cookie session_token
+    if (!token) {
+      const cookieHeader = opts.req.headers.cookie ?? "";
+      const match = cookieHeader.match(/session_token=([^;]+)/);
+      token = match?.[1];
+    }
 
     if (token) {
       const session = await getUserSessionByToken(token);
