@@ -1,8 +1,5 @@
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
-import { COOKIE_NAME } from "@shared/const";
-import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { emailRouter } from "./email-router";
 import { adminSettingsRouter } from "./admin-settings-router";
 import { crmRouter } from "./crm-router";
@@ -39,7 +36,7 @@ import {
   getGlobalSettings, updateGlobalSettings,
   getDb
 } from "./db";
-import { roles, permissions, auditLogs, emailTemplates, emailHistory, emailRecipients } from "../drizzle/schema";
+import { roles, permissions, auditLogs } from "../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
 import { logAudit } from "./audit";
 import { storagePut } from "./storage";
@@ -73,11 +70,11 @@ export const appRouter = router({
     list: protectedProcedure.query(async () => {
       return getAllCategories();
     }),
-    
+
     getById: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => getCategoryById(input.id)),
-    
+
     create: protectedProcedure
       .input(z.object({
         name: z.string().min(1),
@@ -102,7 +99,7 @@ export const appRouter = router({
 
   // ============ DOCUMENTS ============
   documents: router({
-    list: publicProcedure
+    list: protectedProcedure
       .input(z.object({
         categoryId: z.number().optional(),
         status: z.string().optional(),
@@ -113,15 +110,15 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return getAllDocuments(input);
       }),
-    
+
     getById: publicProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => getDocumentById(input.id)),
-    
+
     stats: protectedProcedure.query(async () => {
       return getDocumentStats();
     }),
-    
+
     create: protectedProcedure
       .input(z.object({
         title: z.string().min(1),
@@ -132,10 +129,7 @@ export const appRouter = router({
         dueDate: z.date().optional(),
       }))
       .mutation(async ({ input, ctx }) => {
-        const result = await createDocument({
-          ...input,
-          createdBy: ctx.user.id,
-        });
+        const result = await createDocument({ ...input, createdBy: ctx.user.id });
         await logActivity({
           userId: ctx.user.id,
           action: "create",
@@ -149,7 +143,7 @@ export const appRouter = router({
         });
         return result;
       }),
-    
+
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
@@ -173,7 +167,7 @@ export const appRouter = router({
         });
         return result;
       }),
-    
+
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -187,7 +181,7 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    
+
     uploadFile: protectedProcedure
       .input(z.object({
         documentId: z.number(),
@@ -201,14 +195,7 @@ export const appRouter = router({
         const fileBuffer = Buffer.from(fileBase64, "base64");
         const fileKey = `documents/${documentId}/${nanoid()}-${fileName}`;
         const { url } = await storagePut(fileKey, fileBuffer, fileType);
-        await updateDocument(documentId, {
-          fileUrl: url,
-          fileKey,
-          fileName,
-          fileType,
-          fileSize,
-          updatedBy: ctx.user.id,
-        });
+        await updateDocument(documentId, { fileUrl: url, fileKey, fileName, fileType, fileSize, updatedBy: ctx.user.id });
         await logActivity({
           userId: ctx.user.id,
           action: "upload",
@@ -222,16 +209,12 @@ export const appRouter = router({
         });
         return { success: true, url, fileKey };
       }),
-    
+
     removeFile: protectedProcedure
       .input(z.object({ documentId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         await updateDocument(input.documentId, {
-          fileUrl: null,
-          fileKey: null,
-          fileName: null,
-          fileType: null,
-          fileSize: null,
+          fileUrl: null, fileKey: null, fileName: null, fileType: null, fileSize: null,
           updatedBy: ctx.user.id,
         });
         await logActivity({
@@ -243,7 +226,7 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    
+
     exportReport: publicProcedure
       .input(z.object({
         categoryId: z.number().optional(),
@@ -267,7 +250,7 @@ export const appRouter = router({
         }));
         return { documents: reportData, stats, categories: cats, generatedAt: new Date() };
       }),
-    
+
     archived: publicProcedure
       .input(z.object({
         categoryId: z.number().optional(),
@@ -276,7 +259,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         return getAllDocuments({ ...input, isArchived: true });
       }),
-    
+
     archive: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -294,7 +277,7 @@ export const appRouter = router({
         });
         return result;
       }),
-    
+
     restore: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -315,7 +298,7 @@ export const appRouter = router({
     listByDocument: publicProcedure
       .input(z.object({ documentId: z.number() }))
       .query(async ({ input }) => getNotesByDocumentId(input.documentId)),
-    
+
     create: protectedProcedure
       .input(z.object({
         documentId: z.number(),
@@ -336,7 +319,7 @@ export const appRouter = router({
         });
         return result;
       }),
-    
+
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -355,11 +338,11 @@ export const appRouter = router({
   // ============ MEMBERS ============
   members: router({
     list: protectedProcedure.query(async () => getAllMembers()),
-    
+
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => getMemberById(input.id)),
-    
+
     create: protectedProcedure
       .input(z.object({
         firstName: z.string().min(1),
@@ -385,7 +368,7 @@ export const appRouter = router({
         });
         return result;
       }),
-    
+
     update: protectedProcedure
       .input(z.object({
         id: z.number(),
@@ -409,7 +392,7 @@ export const appRouter = router({
         });
         return result;
       }),
-    
+
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ input, ctx }) => {
@@ -423,7 +406,7 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    
+
     exportList: protectedProcedure.query(async () => {
       const membersList = await getAllMembers();
       return {
@@ -457,8 +440,7 @@ export const appRouter = router({
 
   // ============ ADMIN ============
   admin: router({
-    runMigrations: protectedProcedure.mutation(async ({ ctx }) => {
-      if (ctx.user?.role !== "admin") throw new Error("Only admins can run migrations");
+    runMigrations: adminProcedure.mutation(async ({ ctx }) => {
       try {
         const db = await getDb();
         if (!db) throw new Error("Database connection not available");
@@ -500,7 +482,7 @@ export const appRouter = router({
       catch (error) { console.error("Failed to get permissions:", error); return []; }
     }),
 
-    createRole: protectedProcedure
+    createRole: adminProcedure
       .input(z.object({ name: z.string().min(1), description: z.string().optional() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
@@ -512,7 +494,6 @@ export const appRouter = router({
         } catch (error) { console.error("Failed to create role:", error); throw error; }
       }),
 
-    // Corrigé : filtrage et pagination en SQL
     getAuditLogs: protectedProcedure
       .input(z.object({
         limit: z.number().default(100),
@@ -527,14 +508,9 @@ export const appRouter = router({
           const conditions = [];
           if (input.entityType) conditions.push(eq(auditLogs.entityType, input.entityType));
           if (input.userId) conditions.push(eq(auditLogs.userId, input.userId));
-
           const query = db.select().from(auditLogs);
           const filtered = conditions.length > 0 ? query.where(and(...conditions)) : query;
-
-          return filtered
-            .orderBy(desc(auditLogs.createdAt))
-            .limit(input.limit)
-            .offset(input.offset);
+          return filtered.orderBy(desc(auditLogs.createdAt)).limit(input.limit).offset(input.offset);
         } catch (error) {
           console.error("Failed to get audit logs:", error);
           return [];
@@ -548,14 +524,27 @@ export const appRouter = router({
       return getGlobalSettings();
     }),
 
-update: adminProcedure
-  .input(z.object({
-    associationName: z.string().optional(),
-    ...
-  }))
-  .mutation(async ({ input, ctx }) => {
+    update: adminProcedure
+      .input(z.object({
+        associationName: z.string().optional(),
+        seatCity: z.string().optional(),
+        folio: z.string().optional(),
+        email: z.string().email("Email invalide").optional().or(z.literal('')),
+        website: z.string().optional(),
+        phone: z.string().optional(),
+        logo: z.string().nullable().optional(),
+        description: z.string().optional(),
+      }))
+      .mutation(async ({ input, ctx }) => {
         const result = await updateGlobalSettings({ ...input, updatedBy: ctx.user?.id });
-        await logAudit({ userId: ctx.user?.id, action: "UPDATE", entityType: "globalSettings", entityName: "Global Settings", description: "Updated global settings", status: "success" });
+        await logAudit({
+          userId: ctx.user?.id,
+          action: "UPDATE",
+          entityType: "globalSettings",
+          entityName: "Global Settings",
+          description: "Updated global settings",
+          status: "success",
+        });
         return result;
       }),
   }),
