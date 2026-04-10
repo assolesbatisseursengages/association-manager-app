@@ -61,7 +61,13 @@ export async function getDb() {
 
   if (process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL!, { schema, mode: 'default' }) as any;
+      const connection = mysql.createPool({
+        uri: process.env.DATABASE_URL!,
+        ssl: { rejectUnauthorized: false },
+        waitForConnections: true,
+        connectionLimit: 10,
+      });
+      _db = drizzle(connection, { schema, mode: 'default' }) as any;
       console.log("[Database] Connected successfully");
       return _db;
     } catch (error) {
