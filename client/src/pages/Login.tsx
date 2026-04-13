@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,15 +9,13 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 export default function Login() {
-  const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const loginMutation = trpc.auth.login.useMutation();
-  const utils = trpc.useUtils();
+  const loginMutation = trpc.localAuth.login.useMutation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,18 +32,17 @@ export default function Login() {
       const result = await loginMutation.mutateAsync({ email, password });
 
       if (result.success) {
-        // Cookie HttpOnly posé par le serveur — on stocke uniquement l'affichage
-        localStorage.setItem("userName", result.name ?? "");
-        localStorage.setItem("userRole", result.role ?? "user");
-
-        await utils.auth.me.invalidate();
-        toast.success("Connexion réussie !");
-        setLocation("/");
+        localStorage.setItem("sessionToken", result.sessionToken);
+        localStorage.setItem("userId", result.userId.toString());
+        localStorage.setItem("userName", result.name);
+        toast.success("Connexion réussie!");
+        // Hard reload pour que localStorage soit lu au démarrage
+        window.location.href = "/";
       }
     } catch (err: any) {
-      const msg = err?.message || "Erreur lors de la connexion";
-      setError(msg);
-      toast.error(msg);
+      const errorMessage = err?.message || "Erreur lors de la connexion";
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
@@ -63,8 +59,11 @@ export default function Login() {
         <Card className="border-slate-700 bg-slate-800">
           <CardHeader>
             <CardTitle className="text-white">Connexion</CardTitle>
-            <CardDescription className="text-slate-400">Connectez-vous à votre compte</CardDescription>
+            <CardDescription className="text-slate-400">
+              Connectez-vous à votre compte
+            </CardDescription>
           </CardHeader>
+
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4">
               {error && (
@@ -73,37 +72,69 @@ export default function Login() {
                   <AlertDescription className="text-red-900">{error}</AlertDescription>
                 </Alert>
               )}
+
               <div className="space-y-2">
                 <Label htmlFor="email" className="text-slate-200">Email</Label>
-                <Input id="email" type="email" placeholder="votre@email.com" value={email}
-                  onChange={(e) => setEmail(e.target.value)} disabled={isLoading}
-                  className="bg-slate-700 border-slate-600 text-white placeholder-slate-500" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="votre@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
+                  className="bg-slate-700 border-slate-600 text-white placeholder-slate-500"
+                />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="password" className="text-slate-200">Mot de passe</Label>
                 <div className="relative">
-                  <Input id="password" type={showPassword ? "text" : "password"} placeholder="••••••••"
-                    value={password} onChange={(e) => setPassword(e.target.value)} disabled={isLoading}
-                    className="bg-slate-700 border-slate-600 text-white placeholder-slate-500 pr-10" />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={isLoading}
+                    className="bg-slate-700 border-slate-600 text-white placeholder-slate-500 pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
               </div>
-              <Button type="submit" disabled={isLoading} className="w-full bg-green-600 hover:bg-green-700 text-white">
-                {isLoading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Connexion en cours...</> : "Se connecter"}
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-green-600 hover:bg-green-700 text-white"
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Connexion en cours...
+                  </>
+                ) : (
+                  "Se connecter"
+                )}
               </Button>
+
               <div className="text-center pt-4 border-t border-slate-700">
                 <p className="text-slate-400">
                   Pas encore de compte ?{" "}
-                  <button type="button" onClick={() => setLocation("/register")}
-                    className="text-green-400 hover:text-green-300 font-medium">S'enregistrer</button>
+                  <a href="/register" className="text-green-400 hover:text-green-300 font-medium">
+                    S'enregistrer
+                  </a>
                 </p>
               </div>
             </form>
           </CardContent>
         </Card>
+
         <div className="mt-8 text-center text-slate-500 text-sm">
           <p>© 2024 Les Bâtisseurs Engagés. Tous droits réservés.</p>
         </div>
