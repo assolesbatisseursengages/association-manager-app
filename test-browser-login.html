@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Login</title>
+</head>
+<body>
+    <h1>Test de connexion tRPC</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                console.log('Test de connexion...');
+                
+                // Test avec le format que le frontend utilise
+                const response = await fetch('/api/trpc/localAuth.login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        "0": {
+                            "json": {
+                                "email": "admin@batisseurs-engages.fr",
+                                "password": "Admin123!"
+                            }
+                        }
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = `<h2>✅ Succès!</h2><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                } else {
+                    resultDiv.innerHTML = `<h2>❌ Erreur ${response.status}</h2><pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+                
+            } catch (error) {
+                console.error('Erreur:', error);
+                resultDiv.innerHTML = `<h2>❌ Erreur réseau</h2><pre>${error.message}</pre>`;
+            }
+        }
+        
+        // Auto-test
+        testLogin();
+    </script>
+</body>
+</html>

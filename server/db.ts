@@ -246,21 +246,21 @@ export async function seedDefaultDocuments() {
   if (cats.length === 0) return;
   const catMap = Object.fromEntries(cats.map(c => [c.slug, c.id]));
   const defaultDocs: InsertDocument[] = [
-    { title: "Statuts de l'association", description: "Version validée et conforme", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
-    { title: "Règlement intérieur", description: "Règles de fonctionnement interne", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
-    { title: "Autorisation de fonctionner", description: "Ministère de l'Intérieur", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
-    { title: "PV de l'AG constitutive", description: "Procès-verbal de création", categoryId: catMap["juridique"], priority: "high", status: "pending" },
-    { title: "Liste du Bureau Exécutif", description: "Noms, fonctions et contacts", categoryId: catMap["juridique"], priority: "high", status: "pending" },
-    { title: "Feuille de route stratégique", description: "Vision 1-3 ans", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
-    { title: "Plan d'actions annuel", description: "Actions de l'année", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
-    { title: "Organigramme", description: "Structure organisationnelle", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
-    { title: "Fiches de fonctions", description: "Rôles et responsabilités", categoryId: catMap["gouvernance"], priority: "high", status: "pending" },
-    { title: "Note institutionnelle", description: "Présentation 2-3 pages", categoryId: catMap["operationnel"], priority: "urgent", status: "pending" },
-    { title: "Portfolio des projets", description: "Projets réalisés", categoryId: catMap["operationnel"], priority: "urgent", status: "pending" },
-    { title: "Budget annuel", description: "Budget de fonctionnement", categoryId: catMap["financier"], priority: "urgent", status: "pending" },
-    { title: "Registre des membres", description: "Liste complète des membres", categoryId: catMap["rh"], priority: "high", status: "pending" },
-    { title: "Logo officiel", description: "Identité visuelle", categoryId: catMap["communication"], priority: "high", status: "pending" },
-    { title: "Dossier de demande de financement", description: "Template pour bailleurs", categoryId: catMap["financement"], priority: "urgent", status: "pending" },
+   { title: "Statuts de l'association", slug: toSlug("Statuts de l'association"), description: "Version validée et conforme", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
+    { title: "Règlement intérieur", slug: toSlug("Règlement intérieur"), description: "Règles de fonctionnement interne", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
+    { title: "Autorisation de fonctionner", slug: toSlug("Autorisation de fonctionner"), description: "Ministère de l'Intérieur", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
+    { title: "PV de l'AG constitutive", slug: toSlug("PV de l'AG constitutive"), description: "Procès-verbal de création", categoryId: catMap["juridique"], priority: "high", status: "pending" },
+    { title: "Liste du Bureau Exécutif", slug: toSlug("Liste du Bureau Exécutif"), description: "Noms, fonctions et contacts", categoryId: catMap["juridique"], priority: "high", status: "pending" },
+    { title: "Feuille de route stratégique", slug: toSlug("Feuille de route stratégique"), description: "Vision 1-3 ans", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
+    { title: "Plan d'actions annuel", slug: toSlug("Plan d'actions annuel"), description: "Actions de l'année", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
+    { title: "Organigramme", slug: toSlug("Organigramme"), description: "Structure organisationnelle", categoryId: catMap["gouvernance"], priority: "urgent", status: "pending" },
+    { title: "Fiches de fonctions", slug: toSlug("Fiches de fonctions"), description: "Rôles et responsabilités", categoryId: catMap["gouvernance"], priority: "high", status: "pending" },
+    { title: "Note institutionnelle", slug: toSlug("Note institutionnelle"), description: "Présentation 2-3 pages", categoryId: catMap["operationnel"], priority: "urgent", status: "pending" },
+    { title: "Portfolio des projets", slug: toSlug("Portfolio des projets"), description: "Projets réalisés", categoryId: catMap["operationnel"], priority: "urgent", status: "pending" },
+    { title: "Budget annuel", slug: toSlug("Budget annuel"), description: "Budget de fonctionnement", categoryId: catMap["financier"], priority: "urgent", status: "pending" },
+    { title: "Registre des membres", slug: toSlug("Registre des membres"), description: "Liste complète des membres", categoryId: catMap["rh"], priority: "high", status: "pending" },
+    { title: "Logo officiel", slug: toSlug("Logo officiel"), description: "Identité visuelle", categoryId: catMap["communication"], priority: "high", status: "pending" },
+    { title: "Dossier de demande de financement", slug: toSlug("Dossier de demande de financement"), description: "Template pour bailleurs", categoryId: catMap["financement"], priority: "urgent", status: "pending" },
   ];
   await db.insert(documents).values(defaultDocs);
 }
