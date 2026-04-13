@@ -245,6 +245,7 @@ export async function seedDefaultDocuments() {
   const cats = await getAllCategories();
   if (cats.length === 0) return;
   const catMap = Object.fromEntries(cats.map(c => [c.slug, c.id]));
+  const toSlug = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/-+/g, '-').replace(/^-|-$/g, '');
   const defaultDocs: InsertDocument[] = [
    { title: "Statuts de l'association", slug: toSlug("Statuts de l'association"), description: "Version validée et conforme", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
     { title: "Règlement intérieur", slug: toSlug("Règlement intérieur"), description: "Règles de fonctionnement interne", categoryId: catMap["juridique"], priority: "urgent", status: "pending" },
