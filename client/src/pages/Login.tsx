@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
 export default function Login() {
+  const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -29,15 +31,20 @@ export default function Login() {
         return;
       }
 
-      const result = await loginMutation.mutateAsync({ email, password });
+      const result = await loginMutation.mutateAsync({
+        email,
+        password,
+      });
 
       if (result.success) {
+        console.log("[Login] Success, storing session and redirecting to /home");
         localStorage.setItem("sessionToken", result.sessionToken);
         localStorage.setItem("userId", result.userId.toString());
         localStorage.setItem("userName", result.name);
+
         toast.success("Connexion réussie!");
-        // Hard reload pour que localStorage soit lu au démarrage
-        window.location.href = "/";
+        // Rediriger vers /home qui est la page du tableau de bord protégé
+        setLocation("/home");
       }
     } catch (err: any) {
       const errorMessage = err?.message || "Erreur lors de la connexion";
@@ -126,9 +133,13 @@ export default function Login() {
               <div className="text-center pt-4 border-t border-slate-700">
                 <p className="text-slate-400">
                   Pas encore de compte ?{" "}
-                  <a href="/register" className="text-green-400 hover:text-green-300 font-medium">
+                  <button
+                    type="button"
+                    onClick={() => setLocation("/register")}
+                    className="text-green-400 hover:text-green-300 font-medium"
+                  >
                     S'enregistrer
-                  </a>
+                  </button>
                 </p>
               </div>
             </form>

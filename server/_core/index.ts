@@ -20,6 +20,7 @@ import {
   seedDefaultDocuments,
   initializeGlobalSettings,
   cleanupExpiredSessions,
+  initializeDefaultAdmin,
 } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -70,6 +71,7 @@ async function startServer() {
     // Initialisation unique au démarrage
     try {
       await initializeGlobalSettings();
+      await initializeDefaultAdmin();
       await seedDefaultCategories();
       await seedDefaultDocuments();
       console.log("[Startup] Initialisation terminée");
